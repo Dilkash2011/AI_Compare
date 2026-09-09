@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>AI Compare - Groq vs Gemini</title>
+    <title>AIVORA - AI Comparison Platform</title>
 
     <style>
         * {
@@ -19,22 +19,47 @@
             color: #1f2937;
         }
 
+        /* =========================
+           HEADER
+        ========================== */
+
         header {
             background: #111827;
             color: white;
-            padding: 20px;
+            padding: 22px 20px;
             text-align: center;
         }
 
         header h1 {
             margin-bottom: 5px;
+            font-size: 32px;
+            letter-spacing: 2px;
         }
+
+        header p {
+            font-size: 16px;
+            opacity: 0.85;
+        }
+
+        .creator {
+            margin-top: 8px;
+            font-size: 14px;
+            opacity: 0.7;
+        }
+
+        /* =========================
+           MAIN CONTAINER
+        ========================== */
 
         .container {
             width: 92%;
             max-width: 1200px;
             margin: 35px auto;
         }
+
+        /* =========================
+           HERO
+        ========================== */
 
         .hero {
             text-align: center;
@@ -50,6 +75,10 @@
             color: #6b7280;
             font-size: 17px;
         }
+
+        /* =========================
+           INPUT BOX
+        ========================== */
 
         .input-box {
             background: white;
@@ -74,6 +103,10 @@
             border-color: #6366f1;
         }
 
+        /* =========================
+           BUTTON
+        ========================== */
+
         button {
             margin-top: 15px;
             width: 100%;
@@ -96,11 +129,19 @@
             cursor: not-allowed;
         }
 
+        /* =========================
+           STATUS
+        ========================== */
+
         .status {
             text-align: center;
             margin-top: 12px;
             color: #6b7280;
         }
+
+        /* =========================
+           RESULTS
+        ========================== */
 
         .results {
             display: grid;
@@ -130,6 +171,10 @@
             margin-bottom: 20px;
         }
 
+        /* =========================
+           METRICS
+        ========================== */
+
         .metrics {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -154,6 +199,10 @@
             font-size: 22px;
         }
 
+        /* =========================
+           SCORE
+        ========================== */
+
         .score {
             margin-top: 15px;
             padding: 18px;
@@ -172,6 +221,10 @@
             font-size: 32px;
             color: #4338ca;
         }
+
+        /* =========================
+           WINNER
+        ========================== */
 
         .winner {
             margin-top: 30px;
@@ -204,12 +257,21 @@
             display: none;
         }
 
+        /* =========================
+           MOBILE
+        ========================== */
+
         @media (max-width: 800px) {
+
             .results {
                 grid-template-columns: 1fr;
             }
 
             .hero h2 {
+                font-size: 28px;
+            }
+
+            header h1 {
                 font-size: 28px;
             }
         }
@@ -218,21 +280,44 @@
 
 <body>
 
+<!-- =========================
+     AIVORA HEADER
+========================== -->
+
 <header>
-    <h1>⚡ AI Compare</h1>
-    <p>Groq vs Gemini</p>
+
+    <h1>⚡ AIVORA</h1>
+
+    <p>Compare. Think. Decide.</p>
+
+    <div class="creator">
+        By Dilkash Singh
+    </div>
+
 </header>
 
 
 <div class="container">
 
+    <!-- =========================
+         HERO SECTION
+    ========================== -->
+
     <div class="hero">
+
         <h2>Which AI is Better?</h2>
-        <p>Ask a question and compare Groq and Gemini using an AI Judge.</p>
+
+        <p>
+            Ask a question and compare Groq and Gemini using an AI Judge.
+        </p>
+
     </div>
 
 
-    <!-- QUESTION -->
+    <!-- =========================
+         QUESTION INPUT
+    ========================== -->
+
     <div class="input-box">
 
         <textarea
@@ -240,97 +325,188 @@
             placeholder="Ask your question here..."
         ></textarea>
 
-        <button id="compareButton" onclick="compareAI()">
+        <button
+            id="compareButton"
+            onclick="compareAI()"
+        >
             Compare AI Responses
         </button>
 
-        <div class="status" id="statusText"></div>
+        <div
+            class="status"
+            id="statusText"
+        ></div>
 
     </div>
 
 
-    <!-- RESULTS -->
+    <!-- =========================
+         AI RESULTS
+    ========================== -->
+
     <div class="results">
 
-        <!-- GROQ -->
+        <!-- =====================
+             GROQ
+        ====================== -->
+
         <div class="card">
 
             <h3>⚡ Groq</h3>
 
-            <div class="answer" id="groqAnswer">
+            <div
+                class="answer"
+                id="groqAnswer"
+            >
                 Waiting for response...
             </div>
+
 
             <div class="metrics">
 
                 <div class="metric">
+
                     <span>⚡ Speed</span>
-                    <strong id="groqSpeed">--</strong>
+
+                    <strong id="groqSpeed">
+                        --
+                    </strong>
+
                 </div>
 
+
                 <div class="metric">
+
                     <span>🎯 Relevance</span>
-                    <strong id="groqRelevance">--</strong>
+
+                    <strong id="groqRelevance">
+                        --
+                    </strong>
+
                 </div>
 
+
                 <div class="metric">
+
                     <span>✅ Accuracy</span>
-                    <strong id="groqAccuracy">--</strong>
+
+                    <strong id="groqAccuracy">
+                        --
+                    </strong>
+
                 </div>
 
+
                 <div class="metric">
+
                     <span>📝 Clarity</span>
-                    <strong id="groqClarity">--</strong>
+
+                    <strong id="groqClarity">
+                        --
+                    </strong>
+
                 </div>
 
             </div>
 
+
             <div class="score">
-                <span>⭐ Overall Score</span>
-                <strong id="groqScore">--</strong>
-                <span>/ 10</span>
+
+                <span>
+                    ⭐ Overall Score
+                </span>
+
+                <strong id="groqScore">
+                    --
+                </strong>
+
+                <span>
+                    / 10
+                </span>
+
             </div>
 
         </div>
 
 
-        <!-- GEMINI -->
+        <!-- =====================
+             GEMINI
+        ====================== -->
+
         <div class="card">
 
             <h3>✨ Gemini</h3>
 
-            <div class="answer" id="geminiAnswer">
+            <div
+                class="answer"
+                id="geminiAnswer"
+            >
                 Waiting for response...
             </div>
+
 
             <div class="metrics">
 
                 <div class="metric">
+
                     <span>⚡ Speed</span>
-                    <strong id="geminiSpeed">--</strong>
+
+                    <strong id="geminiSpeed">
+                        --
+                    </strong>
+
                 </div>
 
+
                 <div class="metric">
+
                     <span>🎯 Relevance</span>
-                    <strong id="geminiRelevance">--</strong>
+
+                    <strong id="geminiRelevance">
+                        --
+                    </strong>
+
                 </div>
 
+
                 <div class="metric">
+
                     <span>✅ Accuracy</span>
-                    <strong id="geminiAccuracy">--</strong>
+
+                    <strong id="geminiAccuracy">
+                        --
+                    </strong>
+
                 </div>
 
+
                 <div class="metric">
+
                     <span>📝 Clarity</span>
-                    <strong id="geminiClarity">--</strong>
+
+                    <strong id="geminiClarity">
+                        --
+                    </strong>
+
                 </div>
 
             </div>
 
+
             <div class="score">
-                <span>⭐ Overall Score</span>
-                <strong id="geminiScore">--</strong>
-                <span>/ 10</span>
+
+                <span>
+                    ⭐ Overall Score
+                </span>
+
+                <strong id="geminiScore">
+                    --
+                </strong>
+
+                <span>
+                    / 10
+                </span>
+
             </div>
 
         </div>
@@ -338,21 +514,33 @@
     </div>
 
 
-    <!-- WINNER -->
+    <!-- =========================
+         WINNER
+    ========================== -->
+
     <div class="winner">
 
-        <h2>🏆 Comparison Result</h2>
+        <h2>
+            🏆 Comparison Result
+        </h2>
 
         <div id="winnerText">
             Waiting for comparison...
         </div>
 
+
         <div class="reason">
-            <strong>💡 Why?</strong>
+
+            <strong>
+                💡 Why?
+            </strong>
 
             <p id="reasonText">
+
                 The AI Judge will explain why one response is better.
+
             </p>
+
         </div>
 
     </div>
@@ -360,121 +548,208 @@
 </div>
 
 
+<!-- =========================
+     JAVASCRIPT
+========================== -->
+
 <script>
 
 async function compareAI() {
 
-    const prompt = document.getElementById("prompt").value.trim();
+    const prompt =
+        document
+        .getElementById("prompt")
+        .value
+        .trim();
 
-    const button = document.getElementById("compareButton");
-    const status = document.getElementById("statusText");
+
+    const button =
+        document
+        .getElementById("compareButton");
+
+
+    const status =
+        document
+        .getElementById("statusText");
+
+
+    /* -------------------------
+       CHECK QUESTION
+    -------------------------- */
 
     if (!prompt) {
+
         alert("Please enter a question.");
+
         return;
     }
 
 
-    // Disable button
+    /* -------------------------
+       DISABLE BUTTON
+    -------------------------- */
+
     button.disabled = true;
+
     button.innerText = "Comparing...";
 
-    status.innerText = "🤖 Groq and Gemini are generating answers...";
+
+    status.innerText =
+        "🤖 Groq and Gemini are generating answers...";
 
 
     try {
 
-        const response = await fetch("/compare", {
+        /* -------------------------
+           SEND REQUEST
+        -------------------------- */
 
-            method: "POST",
+        const response =
+            await fetch("/compare", {
 
-            headers: {
-                "Content-Type": "application/json"
-            },
+                method: "POST",
 
-            body: JSON.stringify({
-                text: prompt
-            })
+                headers: {
+                    "Content-Type": "application/json"
+                },
 
-        });
+                body: JSON.stringify({
+                    text: prompt
+                })
 
-
-        const data = await response.json();
-
-
-        // -------------------------
-        // ANSWERS
-        // -------------------------
-
-        document.getElementById("groqAnswer").innerText =
-            data.groq || "No Groq response.";
-
-        document.getElementById("geminiAnswer").innerText =
-            data.gemini || "No Gemini response.";
+            });
 
 
-        // -------------------------
-        // SPEED
-        // -------------------------
-
-        document.getElementById("groqSpeed").innerText =
-            data.groqSpeed + " sec";
-
-        document.getElementById("geminiSpeed").innerText =
-            data.geminiSpeed + " sec";
+        const data =
+            await response.json();
 
 
-        // -------------------------
-        // GROQ SCORES
-        // -------------------------
+        /* -------------------------
+           ANSWERS
+        -------------------------- */
 
-        document.getElementById("groqRelevance").innerText =
-            data.groqRelevance + " / 10";
+        document
+        .getElementById("groqAnswer")
+        .innerText =
+            data.groq ||
+            "No Groq response.";
 
-        document.getElementById("groqAccuracy").innerText =
-            data.groqAccuracy + " / 10";
 
-        document.getElementById("groqClarity").innerText =
-            data.groqClarity + " / 10";
+        document
+        .getElementById("geminiAnswer")
+        .innerText =
+            data.gemini ||
+            "No Gemini response.";
 
-        document.getElementById("groqScore").innerText =
+
+        /* -------------------------
+           SPEED
+        -------------------------- */
+
+        document
+        .getElementById("groqSpeed")
+        .innerText =
+            data.groqSpeed +
+            " sec";
+
+
+        document
+        .getElementById("geminiSpeed")
+        .innerText =
+            data.geminiSpeed +
+            " sec";
+
+
+        /* -------------------------
+           GROQ SCORES
+        -------------------------- */
+
+        document
+        .getElementById("groqRelevance")
+        .innerText =
+            data.groqRelevance +
+            " / 10";
+
+
+        document
+        .getElementById("groqAccuracy")
+        .innerText =
+            data.groqAccuracy +
+            " / 10";
+
+
+        document
+        .getElementById("groqClarity")
+        .innerText =
+            data.groqClarity +
+            " / 10";
+
+
+        document
+        .getElementById("groqScore")
+        .innerText =
             data.groqScore;
 
 
-        // -------------------------
-        // GEMINI SCORES
-        // -------------------------
+        /* -------------------------
+           GEMINI SCORES
+        -------------------------- */
 
-        document.getElementById("geminiRelevance").innerText =
-            data.geminiRelevance + " / 10";
+        document
+        .getElementById("geminiRelevance")
+        .innerText =
+            data.geminiRelevance +
+            " / 10";
 
-        document.getElementById("geminiAccuracy").innerText =
-            data.geminiAccuracy + " / 10";
 
-        document.getElementById("geminiClarity").innerText =
-            data.geminiClarity + " / 10";
+        document
+        .getElementById("geminiAccuracy")
+        .innerText =
+            data.geminiAccuracy +
+            " / 10";
 
-        document.getElementById("geminiScore").innerText =
+
+        document
+        .getElementById("geminiClarity")
+        .innerText =
+            data.geminiClarity +
+            " / 10";
+
+
+        document
+        .getElementById("geminiScore")
+        .innerText =
             data.geminiScore;
 
 
-        // -------------------------
-        // WINNER
-        // -------------------------
+        /* -------------------------
+           WINNER
+        -------------------------- */
 
-        document.getElementById("winnerText").innerText =
-            data.winner || "No winner";
-
-
-        // -------------------------
-        // REASON
-        // -------------------------
-
-        document.getElementById("reasonText").innerText =
-            data.reason || "No explanation available.";
+        document
+        .getElementById("winnerText")
+        .innerText =
+            data.winner ||
+            "No winner";
 
 
-        status.innerText = "✅ Comparison completed successfully.";
+        /* -------------------------
+           REASON
+        -------------------------- */
+
+        document
+        .getElementById("reasonText")
+        .innerText =
+            data.reason ||
+            "No explanation available.";
+
+
+        /* -------------------------
+           SUCCESS
+        -------------------------- */
+
+        status.innerText =
+            "✅ Comparison completed successfully.";
 
     }
 
@@ -489,9 +764,14 @@ async function compareAI() {
     }
 
 
-    // Enable button again
+    /* -------------------------
+       ENABLE BUTTON
+    -------------------------- */
+
     button.disabled = false;
-    button.innerText = "Compare AI Responses";
+
+    button.innerText =
+        "Compare AI Responses";
 
 }
 
