@@ -1,779 +1,2238 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Compare - Groq vs Gemini</title>
 
-    <title>AIVORA - AI Comparison Platform</title>
+<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
 
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f7f7f8;
+    color: #202123;
+    height: 100vh;
+    overflow: hidden;
+}
 
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f7fb;
-            color: #1f2937;
-        }
+.app {
+    display: flex;
+    height: 100vh;
+}
 
-        /* =========================
-           HEADER
-        ========================== */
+/* ================= SIDEBAR ================= */
 
-        header {
-            background: #111827;
-            color: white;
-            padding: 22px 20px;
-            text-align: center;
-        }
+.sidebar {
+    width: 260px;
+    background: #202123;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    padding: 15px;
+}
 
-        header h1 {
-            margin-bottom: 5px;
-            font-size: 32px;
-            letter-spacing: 2px;
-        }
+.logo {
+    font-size: 21px;
+    font-weight: bold;
+    padding: 12px 10px 20px;
+}
 
-        header p {
-            font-size: 16px;
-            opacity: 0.85;
-        }
+.new-chat {
+    width: 100%;
+    background: transparent;
+    border: 1px solid #565869;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
+}
 
-        .creator {
-            margin-top: 8px;
-            font-size: 14px;
-            opacity: 0.7;
-        }
+.new-chat:hover {
+    background: #2a2b32;
+}
 
-        /* =========================
-           MAIN CONTAINER
-        ========================== */
+.sidebar-section {
+    margin-top: 25px;
+    color: #aaa;
+    font-size: 12px;
+    padding: 0 10px 10px;
+    text-transform: uppercase;
+}
 
-        .container {
-            width: 92%;
-            max-width: 1200px;
-            margin: 35px auto;
-        }
+.history-list {
+    overflow-y: auto;
+    flex: 1;
+}
 
-        /* =========================
-           HERO
-        ========================== */
+.history-item {
+    padding: 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: #ddd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
-        .hero {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+.history-item:hover {
+    background: #2a2b32;
+}
 
-        .hero h2 {
-            font-size: 36px;
-            margin-bottom: 10px;
-        }
+.clear-history {
+    background: transparent;
+    border: 1px solid #565869;
+    color: #ddd;
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 10px;
+}
 
-        .hero p {
-            color: #6b7280;
-            font-size: 17px;
-        }
+.clear-history:hover {
+    background: #343541;
+}
 
-        /* =========================
-           INPUT BOX
-        ========================== */
+.creator {
+    border-top: 1px solid #444;
+    padding-top: 15px;
+    margin-top: 15px;
+    font-size: 12px;
+    color: #aaa;
+    text-align: center;
+}
 
-        .input-box {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
-            margin-bottom: 30px;
-        }
+/* ================= MAIN ================= */
 
-        textarea {
-            width: 100%;
-            height: 130px;
-            resize: vertical;
-            border: 2px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 15px;
-            font-size: 16px;
-            outline: none;
-        }
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
 
-        textarea:focus {
-            border-color: #6366f1;
-        }
+.topbar {
+    height: 60px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 25px;
+}
 
-        /* =========================
-           BUTTON
-        ========================== */
+.topbar-title {
+    font-weight: bold;
+    font-size: 17px;
+}
 
-        button {
-            margin-top: 15px;
-            width: 100%;
-            padding: 15px;
-            border: none;
-            border-radius: 10px;
-            background: #4f46e5;
-            color: white;
-            font-size: 17px;
-            font-weight: bold;
-            cursor: pointer;
-        }
+.model-badge {
+    font-size: 12px;
+    color: #666;
+    background: #f0f0f0;
+    padding: 7px 11px;
+    border-radius: 20px;
+}
 
-        button:hover {
-            background: #4338ca;
-        }
+/* ================= CHAT ================= */
 
-        button:disabled {
-            background: #9ca3af;
-            cursor: not-allowed;
-        }
+.chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 140px;
+}
 
-        /* =========================
-           STATUS
-        ========================== */
+.welcome {
+    max-width: 850px;
+    margin: 80px auto 30px;
+    text-align: center;
+    padding: 20px;
+}
 
-        .status {
-            text-align: center;
-            margin-top: 12px;
-            color: #6b7280;
-        }
+.welcome-icon {
+    font-size: 45px;
+    margin-bottom: 15px;
+}
 
-        /* =========================
-           RESULTS
-        ========================== */
+.welcome h1 {
+    font-size: 32px;
+    margin-bottom: 12px;
+}
 
-        .results {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
-        }
+.welcome p {
+    color: #666;
+    line-height: 1.6;
+}
 
-        .card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
-        }
+.messages {
+    max-width: 900px;
+    margin: auto;
+}
 
-        .card h3 {
-            font-size: 25px;
-            margin-bottom: 15px;
-        }
+.message {
+    display: flex;
+    gap: 15px;
+    padding: 22px 15px;
+    line-height: 1.6;
+}
 
-        .answer {
-            background: #f9fafb;
-            border-radius: 10px;
-            padding: 15px;
-            min-height: 180px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-            margin-bottom: 20px;
-        }
+.message.ai {
+    background: #f0f0f0;
+}
 
-        /* =========================
-           METRICS
-        ========================== */
+.avatar {
+    min-width: 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: white;
+    font-size: 13px;
+}
 
-        .metrics {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
+.user-avatar {
+    background: #4f46e5;
+}
 
-        .metric {
-            background: #f3f4f6;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-        }
+.ai-avatar {
+    background: #10a37f;
+}
 
-        .metric span {
-            display: block;
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 6px;
-        }
+.message-content {
+    flex: 1;
+    min-width: 0;
+}
 
-        .metric strong {
-            font-size: 22px;
-        }
+.message-name {
+    font-weight: bold;
+    margin-bottom: 7px;
+}
 
-        /* =========================
-           SCORE
-        ========================== */
+.question-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
 
-        .score {
-            margin-top: 15px;
-            padding: 18px;
-            background: #eef2ff;
-            border-radius: 10px;
-            text-align: center;
-        }
+/* ================= COMPARISON ================= */
 
-        .score span {
-            display: block;
-            color: #4b5563;
-            margin-bottom: 5px;
-        }
+.comparison {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
 
-        .score strong {
-            font-size: 32px;
-            color: #4338ca;
-        }
+.ai-box {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 16px;
+}
 
-        /* =========================
-           WINNER
-        ========================== */
+.ai-box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
 
-        .winner {
-            margin-top: 30px;
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
-        }
+.ai-name {
+    font-weight: bold;
+    font-size: 16px;
+}
 
-        .winner h2 {
-            margin-bottom: 10px;
-        }
+.groq {
+    color: #d62828;
+}
 
-        #winnerText {
-            font-size: 30px;
-            font-weight: bold;
-            margin: 15px 0;
-        }
+.gemini {
+    color: #2563eb;
+}
 
-        .reason {
-            background: #f9fafb;
-            padding: 18px;
-            border-radius: 10px;
-            line-height: 1.6;
-            color: #4b5563;
-        }
+.status {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 15px;
+    background: #eee;
+    color: #666;
+}
 
-        .hidden {
-            display: none;
-        }
+.ai-answer {
+    background: #f8f8f8;
+    border-radius: 8px;
+    padding: 13px;
+    min-height: 130px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 14px;
+    line-height: 1.6;
+}
 
-        /* =========================
-           MOBILE
-        ========================== */
+.speed {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #777;
+}
 
-        @media (max-width: 800px) {
+/* ================= SCORES ================= */
 
-            .results {
-                grid-template-columns: 1fr;
-            }
+.score-area {
+    margin-top: 18px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 18px;
+}
 
-            .hero h2 {
-                font-size: 28px;
-            }
+.score-title {
+    font-weight: bold;
+    margin-bottom: 15px;
+    text-align: center;
+}
 
-            header h1 {
-                font-size: 28px;
-            }
-        }
-    </style>
+.score-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+.score-column h4 {
+    margin-bottom: 10px;
+}
+
+.metric {
+    margin-bottom: 10px;
+}
+
+.metric-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.bar {
+    height: 7px;
+    background: #e5e5e5;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.fill {
+    height: 100%;
+    width: 0%;
+    background: #4f46e5;
+    transition: width .5s ease;
+}
+
+.overall-score {
+    text-align: center;
+    margin-top: 12px;
+    font-size: 13px;
+}
+
+.overall-score strong {
+    font-size: 23px;
+}
+
+/* ================= GRAPH ================= */
+
+.graph-area {
+    margin-top: 18px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.graph-title {
+    text-align: center;
+    font-weight: bold;
+    font-size: 16px;
+    margin-bottom: 20px;
+}
+
+.graph-subtitle {
+    text-align: center;
+    color: #777;
+    font-size: 12px;
+    margin-top: -12px;
+    margin-bottom: 20px;
+}
+
+.graph {
+    height: 270px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: 25px;
+    border-bottom: 1px solid #ccc;
+    border-left: 1px solid #ccc;
+    padding: 20px 25px 0;
+    position: relative;
+}
+
+.graph-column {
+    height: 100%;
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+}
+
+.graph-bar {
+    width: 42px;
+    min-height: 2px;
+    border-radius: 7px 7px 0 0;
+    transition: height .7s ease;
+    position: relative;
+}
+
+.groq-bar {
+    background: #d62828;
+}
+
+.gemini-bar {
+    background: #2563eb;
+}
+
+.graph-value {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.graph-label {
+    position: absolute;
+    bottom: -25px;
+    font-size: 11px;
+    color: #555;
+    text-align: center;
+    width: 100%;
+}
+
+.graph-legend {
+    display: flex;
+    justify-content: center;
+    gap: 25px;
+    margin-top: 40px;
+    font-size: 12px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.groq-dot {
+    background: #d62828;
+}
+
+.gemini-dot {
+    background: #2563eb;
+}
+
+/* ================= SPEED GRAPH ================= */
+
+.speed-comparison {
+    margin-top: 18px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 18px;
+}
+
+.speed-title {
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+.speed-row {
+    margin-bottom: 15px;
+}
+
+.speed-row-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.speed-track {
+    height: 12px;
+    background: #e5e5e5;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.speed-fill {
+    height: 100%;
+    width: 0%;
+    transition: width .7s ease;
+}
+
+.speed-groq {
+    background: #d62828;
+}
+
+.speed-gemini {
+    background: #2563eb;
+}
+
+/* ================= WINNER ================= */
+
+.winner-box {
+    margin-top: 18px;
+    background: #ecfdf5;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+}
+
+.winner-box h3 {
+    color: #15803d;
+    margin-bottom: 7px;
+}
+
+.winner-name {
+    font-size: 25px;
+    font-weight: bold;
+    color: #166534;
+}
+
+.winner-reason {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.5;
+}
+
+/* ================= INPUT ================= */
+
+.input-area {
+    position: fixed;
+    bottom: 0;
+    left: 260px;
+    right: 0;
+    background: linear-gradient(
+        transparent,
+        #f7f7f8 25%
+    );
+    padding: 25px 20px 20px;
+}
+
+.input-wrapper {
+    max-width: 850px;
+    margin: auto;
+}
+
+.input-box {
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 14px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    max-height: 150px;
+    min-height: 25px;
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 7px;
+    background: transparent;
+}
+
+.send-button {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 8px;
+    background: #10a37f;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.send-button:hover {
+    background: #0d8c6c;
+}
+
+.send-button:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+}
+
+.input-info {
+    text-align: center;
+    color: #777;
+    font-size: 11px;
+    margin-top: 8px;
+}
+
+/* ================= EXAMPLES ================= */
+
+.examples {
+    max-width: 850px;
+    margin: 25px auto 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.example {
+    background: white;
+    border: 1px solid #ddd;
+    padding: 13px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #555;
+}
+
+.example:hover {
+    border-color: #aaa;
+    background: #fafafa;
+}
+
+/* ================= MOBILE ================= */
+
+@media (max-width: 800px) {
+
+    .sidebar {
+        display: none;
+    }
+
+    .input-area {
+        left: 0;
+    }
+
+    .comparison {
+        grid-template-columns: 1fr;
+    }
+
+    .score-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .messages {
+        width: 100%;
+    }
+
+    .message {
+        padding: 18px 10px;
+    }
+
+    .welcome {
+        margin-top: 40px;
+    }
+
+    .welcome h1 {
+        font-size: 25px;
+    }
+
+    .examples {
+        grid-template-columns: 1fr;
+    }
+
+    .topbar {
+        padding: 0 15px;
+    }
+
+    .graph {
+        gap: 10px;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .graph-bar {
+        width: 28px;
+    }
+}
+</style>
+
 </head>
 
 <body>
 
-<!-- =========================
-     AIVORA HEADER
-========================== -->
+<div class="app">
 
-<header>
+<!-- SIDEBAR -->
 
-    <h1>⚡ AIVORA</h1>
+<aside class="sidebar">
 
-    <p>Compare. Think. Decide.</p>
+```
+<div class="logo">
+    🤖 AI Compare
+</div>
 
-    <div class="creator">
-        By Dilkash Singh
+<button class="new-chat" onclick="newChat()">
+    ＋ New Chat
+</button>
+
+<div class="sidebar-section">
+    Chat History
+</div>
+
+<div class="history-list" id="historyList">
+    <div style="padding:10px;color:#888;font-size:12px;">
+        Loading history...
+    </div>
+</div>
+
+<button class="clear-history" onclick="clearHistory()">
+    🗑 Clear History
+</button>
+
+<div class="creator">
+    MCA Dissertation Project<br>
+    Created by Dilkash Singh
+</div>
+```
+
+</aside>
+
+<!-- MAIN -->
+
+<main class="main">
+
+```
+<div class="topbar">
+
+    <div class="topbar-title">
+        AI Compare
     </div>
 
-</header>
-
-
-<div class="container">
-
-    <!-- =========================
-         HERO SECTION
-    ========================== -->
-
-    <div class="hero">
-
-        <h2>Which AI is Better?</h2>
-
-        <p>
-            Ask a question and compare Groq and Gemini using an AI Judge.
-        </p>
-
-    </div>
-
-
-    <!-- =========================
-         QUESTION INPUT
-    ========================== -->
-
-    <div class="input-box">
-
-        <textarea
-            id="prompt"
-            placeholder="Ask your question here..."
-        ></textarea>
-
-        <button
-            id="compareButton"
-            onclick="compareAI()"
-        >
-            Compare AI Responses
-        </button>
-
-        <div
-            class="status"
-            id="statusText"
-        ></div>
-
-    </div>
-
-
-    <!-- =========================
-         AI RESULTS
-    ========================== -->
-
-    <div class="results">
-
-        <!-- =====================
-             GROQ
-        ====================== -->
-
-        <div class="card">
-
-            <h3>⚡ Groq</h3>
-
-            <div
-                class="answer"
-                id="groqAnswer"
-            >
-                Waiting for response...
-            </div>
-
-
-            <div class="metrics">
-
-                <div class="metric">
-
-                    <span>⚡ Speed</span>
-
-                    <strong id="groqSpeed">
-                        --
-                    </strong>
-
-                </div>
-
-
-                <div class="metric">
-
-                    <span>🎯 Relevance</span>
-
-                    <strong id="groqRelevance">
-                        --
-                    </strong>
-
-                </div>
-
-
-                <div class="metric">
-
-                    <span>✅ Accuracy</span>
-
-                    <strong id="groqAccuracy">
-                        --
-                    </strong>
-
-                </div>
-
-
-                <div class="metric">
-
-                    <span>📝 Clarity</span>
-
-                    <strong id="groqClarity">
-                        --
-                    </strong>
-
-                </div>
-
-            </div>
-
-
-            <div class="score">
-
-                <span>
-                    ⭐ Overall Score
-                </span>
-
-                <strong id="groqScore">
-                    --
-                </strong>
-
-                <span>
-                    / 10
-                </span>
-
-            </div>
-
-        </div>
-
-
-        <!-- =====================
-             GEMINI
-        ====================== -->
-
-        <div class="card">
-
-            <h3>✨ Gemini</h3>
-
-            <div
-                class="answer"
-                id="geminiAnswer"
-            >
-                Waiting for response...
-            </div>
-
-
-            <div class="metrics">
-
-                <div class="metric">
-
-                    <span>⚡ Speed</span>
-
-                    <strong id="geminiSpeed">
-                        --
-                    </strong>
-
-                </div>
-
-
-                <div class="metric">
-
-                    <span>🎯 Relevance</span>
-
-                    <strong id="geminiRelevance">
-                        --
-                    </strong>
-
-                </div>
-
-
-                <div class="metric">
-
-                    <span>✅ Accuracy</span>
-
-                    <strong id="geminiAccuracy">
-                        --
-                    </strong>
-
-                </div>
-
-
-                <div class="metric">
-
-                    <span>📝 Clarity</span>
-
-                    <strong id="geminiClarity">
-                        --
-                    </strong>
-
-                </div>
-
-            </div>
-
-
-            <div class="score">
-
-                <span>
-                    ⭐ Overall Score
-                </span>
-
-                <strong id="geminiScore">
-                    --
-                </strong>
-
-                <span>
-                    / 10
-                </span>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- =========================
-         WINNER
-    ========================== -->
-
-    <div class="winner">
-
-        <h2>
-            🏆 Comparison Result
-        </h2>
-
-        <div id="winnerText">
-            Waiting for comparison...
-        </div>
-
-
-        <div class="reason">
-
-            <strong>
-                💡 Why?
-            </strong>
-
-            <p id="reasonText">
-
-                The AI Judge will explain why one response is better.
-
-            </p>
-
-        </div>
-
+    <div class="model-badge">
+        Groq ⚡ vs Gemini ✨
     </div>
 
 </div>
 
 
-<!-- =========================
-     JAVASCRIPT
-========================== -->
+<!-- CHAT -->
+
+<div class="chat-container" id="chatContainer">
+
+    <div class="welcome" id="welcome">
+
+        <div class="welcome-icon">
+            🤖
+        </div>
+
+        <h1>
+            Which AI gives the better answer?
+        </h1>
+
+        <p>
+            Ask a question and AI Compare will get responses
+            from Groq and Gemini, then compare their
+            accuracy, relevance, clarity and speed.
+        </p>
+
+        <div class="examples">
+
+            <div class="example"
+                 onclick="useExample('What is Artificial Intelligence?')">
+                What is Artificial Intelligence?
+            </div>
+
+            <div class="example"
+                 onclick="useExample('Explain cloud computing in simple words.')">
+                Explain Cloud Computing
+            </div>
+
+            <div class="example"
+                 onclick="useExample('What are the advantages of Python?')">
+                Advantages of Python
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+</div>
+
+
+<!-- INPUT -->
+
+<div class="input-area">
+
+    <div class="input-wrapper">
+
+        <div class="input-box">
+
+            <textarea
+                id="prompt"
+                maxlength="2000"
+                rows="1"
+                placeholder="Message AI Compare..."
+            ></textarea>
+
+            <button
+                class="send-button"
+                id="sendButton"
+                onclick="compareAI()">
+                ↑
+            </button>
+
+        </div>
+
+        <div class="input-info">
+            Press Enter to send • Shift + Enter for new line
+        </div>
+
+    </div>
+
+</div>
+```
+
+</main>
+
+</div>
 
 <script>
 
-async function compareAI() {
+const promptBox =
+    document.getElementById("prompt");
 
-    const prompt =
-        document
-        .getElementById("prompt")
-        .value
-        .trim();
+const sendButton =
+    document.getElementById("sendButton");
 
+const messages =
+    document.getElementById("messages");
 
-    const button =
-        document
-        .getElementById("compareButton");
-
-
-    const status =
-        document
-        .getElementById("statusText");
+const welcome =
+    document.getElementById("welcome");
 
 
-    /* -------------------------
-       CHECK QUESTION
-    -------------------------- */
+/* ================= TEXTAREA ================= */
 
-    if (!prompt) {
+promptBox.addEventListener(
+    "input",
+    function () {
 
-        alert("Please enter a question.");
+        this.style.height = "auto";
+
+        this.style.height =
+            Math.min(this.scrollHeight, 150) + "px";
+    }
+);
+
+
+/* ================= ENTER ================= */
+
+promptBox.addEventListener(
+    "keydown",
+    function (event) {
+
+        if (
+            event.key === "Enter" &&
+            !event.shiftKey
+        ) {
+
+            event.preventDefault();
+
+            compareAI();
+        }
+
+    }
+);
+
+
+/* ================= EXAMPLE ================= */
+
+function useExample(text) {
+
+    promptBox.value = text;
+
+    promptBox.focus();
+
+    promptBox.dispatchEvent(
+        new Event("input")
+    );
+}
+
+
+/* ================= NEW CHAT ================= */
+
+function newChat() {
+
+    messages.innerHTML = "";
+
+    welcome.style.display = "block";
+
+    promptBox.value = "";
+
+    promptBox.style.height = "auto";
+
+    promptBox.focus();
+
+    document
+        .getElementById("chatContainer")
+        .scrollTop = 0;
+}
+
+
+/* ================= AI REQUEST ================= */
+
+async function getAIResponse(url, text) {
+
+    try {
+
+        const response =
+            await fetch(
+                url,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        text: text
+                    })
+                }
+            );
+
+        return await response.json();
+
+    } catch (error) {
+
+        console.error(url + " error:", error);
+
+        return {
+
+            success: false,
+
+            answer:
+                "Unable to connect to the AI service.",
+
+            speed: 0
+        };
+    }
+}
+
+
+/* ================= USER MESSAGE ================= */
+
+function addUserMessage(text) {
+
+    welcome.style.display = "none";
+
+    const message =
+        document.createElement("div");
+
+    message.className =
+        "message user";
+
+    message.innerHTML = `
+        <div class="avatar user-avatar">
+            U
+        </div>
+
+        <div class="message-content">
+
+            <div class="message-name">
+                You
+            </div>
+
+            <div class="question-text"></div>
+
+        </div>
+    `;
+
+    message
+        .querySelector(".question-text")
+        .textContent = text;
+
+    messages.appendChild(message);
+}
+
+
+/* ================= AI MESSAGE ================= */
+
+function addAIMessage() {
+
+    const message =
+        document.createElement("div");
+
+    message.className =
+        "message ai";
+
+    message.innerHTML = `
+
+        <div class="avatar ai-avatar">
+            AI
+        </div>
+
+        <div class="message-content">
+
+            <div class="message-name">
+                AI Compare
+            </div>
+
+            <div class="comparison">
+
+                <div class="ai-box">
+
+                    <div class="ai-box-header">
+
+                        <span class="ai-name groq">
+                            ⚡ Groq
+                        </span>
+
+                        <span
+                            class="status"
+                            id="newGroqStatus">
+                            Processing
+                        </span>
+
+                    </div>
+
+                    <div
+                        class="ai-answer"
+                        id="newGroqAnswer">
+                        Getting response...
+                    </div>
+
+                    <div class="speed">
+                        Response Time:
+                        <strong id="newGroqSpeed">
+                            Waiting...
+                        </strong>
+                    </div>
+
+                </div>
+
+
+                <div class="ai-box">
+
+                    <div class="ai-box-header">
+
+                        <span class="ai-name gemini">
+                            ✨ Gemini
+                        </span>
+
+                        <span
+                            class="status"
+                            id="newGeminiStatus">
+                            Processing
+                        </span>
+
+                    </div>
+
+                    <div
+                        class="ai-answer"
+                        id="newGeminiAnswer">
+                        Getting response...
+                    </div>
+
+                    <div class="speed">
+                        Response Time:
+                        <strong id="newGeminiSpeed">
+                            Waiting...
+                        </strong>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- SCORE AREA -->
+
+            <div
+                class="score-area"
+                id="newScoreArea">
+
+                <div class="score-title">
+                    📊 AI Performance Comparison
+                </div>
+
+                <div class="score-columns">
+
+                    <div class="score-column">
+
+                        <h4 class="groq">
+                            Groq
+                        </h4>
+
+                        <div class="metric">
+
+                            <div class="metric-top">
+                                <span>Accuracy</span>
+                                <span id="newGroqAccuracyText">0%</span>
+                            </div>
+
+                            <div class="bar">
+                                <div
+                                    class="fill"
+                                    id="newGroqAccuracy">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="metric">
+
+                            <div class="metric-top">
+                                <span>Relevance</span>
+                                <span id="newGroqRelevanceText">0%</span>
+                            </div>
+
+                            <div class="bar">
+                                <div
+                                    class="fill"
+                                    id="newGroqRelevance">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="metric">
+
+                            <div class="metric-top">
+                                <span>Clarity</span>
+                                <span id="newGroqClarityText">0%</span>
+                            </div>
+
+                            <div class="bar">
+                                <div
+                                    class="fill"
+                                    id="newGroqClarity">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="overall-score">
+
+                            Overall:
+                            <strong id="newGroqScore">
+                                0
+                            </strong>/100
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="score-column">
+
+                        <h4 class="gemini">
+                            Gemini
+                        </h4>
+
+                        <div class="metric">
+
+                            <div class="metric-top">
+                                <span>Accuracy</span>
+                                <span id="newGeminiAccuracyText">0%</span>
+                            </div>
+
+                            <div class="bar">
+                                <div
+                                    class="fill"
+                                    id="newGeminiAccuracy">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="metric">
+
+                            <div class="metric-top">
+                                <span>Relevance</span>
+                                <span id="newGeminiRelevanceText">0%</span>
+                            </div>
+
+                            <div class="bar">
+                                <div
+                                    class="fill"
+                                    id="newGeminiRelevance">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="metric">
+
+                            <div class="metric-top">
+                                <span>Clarity</span>
+                                <span id="newGeminiClarityText">0%</span>
+                            </div>
+
+                            <div class="bar">
+                                <div
+                                    class="fill"
+                                    id="newGeminiClarity">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="overall-score">
+
+                            Overall:
+                            <strong id="newGeminiScore">
+                                0
+                            </strong>/100
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- PERFORMANCE GRAPH -->
+
+            <div class="graph-area">
+
+                <div class="graph-title">
+                    📈 Performance Graph
+                </div>
+
+                <div class="graph-subtitle">
+                    Comparison of AI response quality
+                </div>
+
+                <div class="graph">
+
+                    <div class="graph-column">
+
+                        <div
+                            class="graph-bar groq-bar"
+                            id="graphGroqAccuracy"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGroqAccuracyValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div
+                            class="graph-bar gemini-bar"
+                            id="graphGeminiAccuracy"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGeminiAccuracyValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div class="graph-label">
+                            Accuracy
+                        </div>
+
+                    </div>
+
+
+                    <div class="graph-column">
+
+                        <div
+                            class="graph-bar groq-bar"
+                            id="graphGroqRelevance"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGroqRelevanceValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div
+                            class="graph-bar gemini-bar"
+                            id="graphGeminiRelevance"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGeminiRelevanceValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div class="graph-label">
+                            Relevance
+                        </div>
+
+                    </div>
+
+
+                    <div class="graph-column">
+
+                        <div
+                            class="graph-bar groq-bar"
+                            id="graphGroqClarity"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGroqClarityValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div
+                            class="graph-bar gemini-bar"
+                            id="graphGeminiClarity"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGeminiClarityValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div class="graph-label">
+                            Clarity
+                        </div>
+
+                    </div>
+
+
+                    <div class="graph-column">
+
+                        <div
+                            class="graph-bar groq-bar"
+                            id="graphGroqOverall"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGroqOverallValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div
+                            class="graph-bar gemini-bar"
+                            id="graphGeminiOverall"
+                            style="height:2px;">
+
+                            <span
+                                class="graph-value"
+                                id="graphGeminiOverallValue">
+                                0
+                            </span>
+
+                        </div>
+
+                        <div class="graph-label">
+                            Overall
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="graph-legend">
+
+                    <div class="legend-item">
+                        <span class="legend-dot groq-dot"></span>
+                        Groq
+                    </div>
+
+                    <div class="legend-item">
+                        <span class="legend-dot gemini-dot"></span>
+                        Gemini
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- SPEED COMPARISON -->
+
+            <div class="speed-comparison">
+
+                <div class="speed-title">
+                    ⚡ Response Speed Comparison
+                </div>
+
+                <div class="speed-row">
+
+                    <div class="speed-row-top">
+                        <span>Groq</span>
+                        <strong id="graphGroqSpeedText">
+                            Waiting...
+                        </strong>
+                    </div>
+
+                    <div class="speed-track">
+                        <div
+                            class="speed-fill speed-groq"
+                            id="graphGroqSpeed">
+                        </div>
+                    </div>
+
+                </div>
+
+
+                <div class="speed-row">
+
+                    <div class="speed-row-top">
+                        <span>Gemini</span>
+                        <strong id="graphGeminiSpeedText">
+                            Waiting...
+                        </strong>
+                    </div>
+
+                    <div class="speed-track">
+                        <div
+                            class="speed-fill speed-gemini"
+                            id="graphGeminiSpeed">
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- WINNER -->
+
+            <div
+                class="winner-box"
+                id="newWinnerBox">
+
+                <h3>
+                    🏆 Winner
+                </h3>
+
+                <div
+                    class="winner-name"
+                    id="newWinnerName">
+                    Waiting for both responses...
+                </div>
+
+                <div
+                    class="winner-reason"
+                    id="newWinnerReason">
+                    The final comparison will appear after both AI responses are received.
+                </div>
+
+            </div>
+
+        </div>
+    `;
+
+    messages.appendChild(message);
+
+    scrollToBottom();
+
+    return message;
+}
+
+
+/* ================= METRIC ================= */
+
+function setMetric(
+    id,
+    textId,
+    value
+) {
+
+    value =
+        Number(value) || 0;
+
+    document
+        .getElementById(id)
+        .style.width =
+            value + "%";
+
+    document
+        .getElementById(textId)
+        .textContent =
+            value + "%";
+}
+
+
+/* ================= GRAPH UPDATE ================= */
+
+function setGraphBar(
+    barId,
+    valueId,
+    value
+) {
+
+    value =
+        Number(value) || 0;
+
+    const bar =
+        document.getElementById(barId);
+
+    const valueText =
+        document.getElementById(valueId);
+
+    if (!bar || !valueText) {
+        return;
+    }
+
+    const height =
+        Math.max(value * 2.1, 2);
+
+    bar.style.height =
+        height + "px";
+
+    valueText.textContent =
+        Math.round(value);
+}
+
+
+/* ================= UPDATE GRAPH ================= */
+
+function updateGraph(result) {
+
+    if (!result) {
+        return;
+    }
+
+    const groq =
+        result.groq || {};
+
+    const gemini =
+        result.gemini || {};
+
+
+    setGraphBar(
+        "graphGroqAccuracy",
+        "graphGroqAccuracyValue",
+        groq.accuracy
+    );
+
+    setGraphBar(
+        "graphGeminiAccuracy",
+        "graphGeminiAccuracyValue",
+        gemini.accuracy
+    );
+
+
+    setGraphBar(
+        "graphGroqRelevance",
+        "graphGroqRelevanceValue",
+        groq.relevance
+    );
+
+    setGraphBar(
+        "graphGeminiRelevance",
+        "graphGeminiRelevanceValue",
+        gemini.relevance
+    );
+
+
+    setGraphBar(
+        "graphGroqClarity",
+        "graphGroqClarityValue",
+        groq.clarity
+    );
+
+    setGraphBar(
+        "graphGeminiClarity",
+        "graphGeminiClarityValue",
+        gemini.clarity
+    );
+
+
+    setGraphBar(
+        "graphGroqOverall",
+        "graphGroqOverallValue",
+        groq.final_score
+    );
+
+    setGraphBar(
+        "graphGeminiOverall",
+        "graphGeminiOverallValue",
+        gemini.final_score
+    );
+}
+
+
+/* ================= SPEED GRAPH ================= */
+
+function updateSpeedGraph(
+    groqSpeed,
+    geminiSpeed
+) {
+
+    groqSpeed =
+        Number(groqSpeed) || 0;
+
+    geminiSpeed =
+        Number(geminiSpeed) || 0;
+
+
+    const groqText =
+        document.getElementById(
+            "graphGroqSpeedText"
+        );
+
+    const geminiText =
+        document.getElementById(
+            "graphGeminiSpeedText"
+        );
+
+    const groqBar =
+        document.getElementById(
+            "graphGroqSpeed"
+        );
+
+    const geminiBar =
+        document.getElementById(
+            "graphGeminiSpeed"
+        );
+
+
+    if (
+        !groqText ||
+        !geminiText ||
+        !groqBar ||
+        !geminiBar
+    ) {
+        return;
+    }
+
+
+    groqText.textContent =
+        groqSpeed + " sec";
+
+    geminiText.textContent =
+        geminiSpeed + " sec";
+
+
+    if (
+        groqSpeed <= 0 &&
+        geminiSpeed <= 0
+    ) {
+        return;
+    }
+
+
+    const maxSpeed =
+        Math.max(
+            groqSpeed,
+            geminiSpeed
+        );
+
+
+    if (maxSpeed > 0) {
+
+        groqBar.style.width =
+            (groqSpeed / maxSpeed * 100) + "%";
+
+        geminiBar.style.width =
+            (geminiSpeed / maxSpeed * 100) + "%";
+    }
+}
+
+
+/* ================= JUDGE ================= */
+
+function updateJudge(result) {
+
+    if (!result) {
+        return;
+    }
+
+
+    const winner =
+        document.getElementById(
+            "newWinnerName"
+        );
+
+    const reason =
+        document.getElementById(
+            "newWinnerReason"
+        );
+
+
+    if (!result.success) {
+
+        winner.textContent =
+            "Unable to determine";
+
+        reason.textContent =
+            result.reason ||
+            "Comparison could not be completed.";
+
+        updateGraph(result);
 
         return;
     }
 
 
-    /* -------------------------
-       DISABLE BUTTON
-    -------------------------- */
-
-    button.disabled = true;
-
-    button.innerText = "Comparing...";
+    winner.textContent =
+        "🏆 " + result.winner;
 
 
-    status.innerText =
-        "🤖 Groq and Gemini are generating answers...";
+    reason.textContent =
+        result.reason ||
+        "Comparison completed.";
+
+
+    if (result.groq) {
+
+        setMetric(
+            "newGroqAccuracy",
+            "newGroqAccuracyText",
+            result.groq.accuracy
+        );
+
+        setMetric(
+            "newGroqRelevance",
+            "newGroqRelevanceText",
+            result.groq.relevance
+        );
+
+        setMetric(
+            "newGroqClarity",
+            "newGroqClarityText",
+            result.groq.clarity
+        );
+
+        document
+            .getElementById("newGroqScore")
+            .textContent =
+                result.groq.final_score ?? 0;
+    }
+
+
+    if (result.gemini) {
+
+        setMetric(
+            "newGeminiAccuracy",
+            "newGeminiAccuracyText",
+            result.gemini.accuracy
+        );
+
+        setMetric(
+            "newGeminiRelevance",
+            "newGeminiRelevanceText",
+            result.gemini.relevance
+        );
+
+        setMetric(
+            "newGeminiClarity",
+            "newGeminiClarityText",
+            result.gemini.clarity
+        );
+
+        document
+            .getElementById("newGeminiScore")
+            .textContent =
+                result.gemini.final_score ?? 0;
+    }
+
+
+    updateGraph(result);
+
+    scrollToBottom();
+}
+
+
+/* ================= SHOW GROQ ================= */
+
+function showGroqResult(data) {
+
+    const answer =
+        document.getElementById(
+            "newGroqAnswer"
+        );
+
+    const status =
+        document.getElementById(
+            "newGroqStatus"
+        );
+
+    const speed =
+        document.getElementById(
+            "newGroqSpeed"
+        );
+
+
+    answer.textContent =
+        data.answer ||
+        "No response received.";
+
+
+    speed.textContent =
+        (data.speed || 0) +
+        " sec";
+
+
+    status.textContent =
+        data.success
+            ? "Completed"
+            : "Unavailable";
+
+
+    scrollToBottom();
+}
+
+
+/* ================= SHOW GEMINI ================= */
+
+function showGeminiResult(data) {
+
+    const answer =
+        document.getElementById(
+            "newGeminiAnswer"
+        );
+
+    const status =
+        document.getElementById(
+            "newGeminiStatus"
+        );
+
+    const speed =
+        document.getElementById(
+            "newGeminiSpeed"
+        );
+
+
+    answer.textContent =
+        data.answer ||
+        "No response received.";
+
+
+    speed.textContent =
+        (data.speed || 0) +
+        " sec";
+
+
+    status.textContent =
+        data.success
+            ? "Completed"
+            : "Unavailable";
+
+
+    scrollToBottom();
+}
+
+
+/* ================= COMPARE ================= */
+
+async function compareAI() {
+
+    const text =
+        promptBox.value.trim();
+
+
+    if (!text) {
+        return;
+    }
+
+
+    sendButton.disabled = true;
+
+    sendButton.textContent = "…";
+
+
+    addUserMessage(text);
+
+    addAIMessage();
+
+
+    promptBox.value = "";
+
+    promptBox.style.height = "auto";
+
+
+    /*
+     * Both requests start together.
+     * Each answer is displayed immediately.
+     */
+
+    const groqPromise =
+        getAIResponse(
+            "/groq",
+            text
+        );
+
+
+    const geminiPromise =
+        getAIResponse(
+            "/gemini",
+            text
+        );
+
+
+    let groqData = null;
+
+    let geminiData = null;
+
+
+    const groqFinished =
+        groqPromise.then(
+            function (data) {
+
+                groqData = data;
+
+                showGroqResult(data);
+
+                return data;
+            }
+        );
+
+
+    const geminiFinished =
+        geminiPromise.then(
+            function (data) {
+
+                geminiData = data;
+
+                showGeminiResult(data);
+
+                return data;
+            }
+        );
 
 
     try {
 
-        /* -------------------------
-           SEND REQUEST
-        -------------------------- */
+        await Promise.all([
+            groqFinished,
+            geminiFinished
+        ]);
+
+
+        /*
+         * After both AI responses arrive,
+         * ask the judge to compare them.
+         */
+
+        const judgeResponse =
+            await fetch(
+                "/judge",
+                {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        question: text,
+
+                        groq:
+                            groqData?.answer || "",
+
+                        gemini:
+                            geminiData?.answer || "",
+
+                        groqSpeed:
+                            groqData?.speed || 0,
+
+                        geminiSpeed:
+                            geminiData?.speed || 0,
+
+                        groqSuccess:
+                            groqData?.success || false,
+
+                        geminiSuccess:
+                            geminiData?.success || false
+
+                    })
+                }
+            );
+
+
+        const judgeResult =
+            await judgeResponse.json();
+
+
+        updateJudge(
+            judgeResult
+        );
+
+
+        updateSpeedGraph(
+            groqData?.speed || 0,
+            geminiData?.speed || 0
+        );
+
+
+        loadHistory();
+
+
+    } catch (error) {
+
+        console.error(
+            "Comparison error:",
+            error
+        );
+
+
+        document
+            .getElementById(
+                "newWinnerName"
+            )
+            .textContent =
+                "Comparison Error";
+
+
+        document
+            .getElementById(
+                "newWinnerReason"
+            )
+            .textContent =
+                "The AI responses were received, but the final comparison could not be completed.";
+
+    }
+
+
+    sendButton.disabled = false;
+
+    sendButton.textContent = "↑";
+
+    promptBox.focus();
+}
+
+
+/* ================= HISTORY ================= */
+
+async function loadHistory() {
+
+    const list =
+        document.getElementById(
+            "historyList"
+        );
+
+
+    try {
 
         const response =
-            await fetch("/compare", {
-
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    text: prompt
-                })
-
-            });
+            await fetch("/history");
 
 
         const data =
             await response.json();
 
 
-        /* -------------------------
-           ANSWERS
-        -------------------------- */
+        if (
+            !data.success ||
+            !data.history ||
+            data.history.length === 0
+        ) {
 
-        document
-        .getElementById("groqAnswer")
-        .innerText =
-            data.groq ||
-            "No Groq response.";
+            list.innerHTML =
+                `
+                <div style="
+                    padding:10px;
+                    color:#888;
+                    font-size:12px;
+                ">
+                    No previous comparisons.
+                </div>
+                `;
 
-
-        document
-        .getElementById("geminiAnswer")
-        .innerText =
-            data.gemini ||
-            "No Gemini response.";
-
-
-        /* -------------------------
-           SPEED
-        -------------------------- */
-
-        document
-        .getElementById("groqSpeed")
-        .innerText =
-            data.groqSpeed +
-            " sec";
+            return;
+        }
 
 
-        document
-        .getElementById("geminiSpeed")
-        .innerText =
-            data.geminiSpeed +
-            " sec";
+        list.innerHTML = "";
 
 
-        /* -------------------------
-           GROQ SCORES
-        -------------------------- */
+        data.history.forEach(
+            function(item) {
 
-        document
-        .getElementById("groqRelevance")
-        .innerText =
-            data.groqRelevance +
-            " / 10";
+                const div =
+                    document.createElement(
+                        "div"
+                    );
 
 
-        document
-        .getElementById("groqAccuracy")
-        .innerText =
-            data.groqAccuracy +
-            " / 10";
+                div.className =
+                    "history-item";
 
 
-        document
-        .getElementById("groqClarity")
-        .innerText =
-            data.groqClarity +
-            " / 10";
+                div.textContent =
+                    item.question ||
+                    "Previous comparison";
 
 
-        document
-        .getElementById("groqScore")
-        .innerText =
-            data.groqScore;
+                div.title =
+                    item.question ||
+                    "";
 
 
-        /* -------------------------
-           GEMINI SCORES
-        -------------------------- */
+                div.onclick =
+                    function() {
 
-        document
-        .getElementById("geminiRelevance")
-        .innerText =
-            data.geminiRelevance +
-            " / 10";
+                        promptBox.value =
+                            item.question || "";
 
+                        promptBox.focus();
 
-        document
-        .getElementById("geminiAccuracy")
-        .innerText =
-            data.geminiAccuracy +
-            " / 10";
+                        promptBox.dispatchEvent(
+                            new Event("input")
+                        );
+                    };
 
 
-        document
-        .getElementById("geminiClarity")
-        .innerText =
-            data.geminiClarity +
-            " / 10";
+                list.appendChild(div);
+
+            }
+        );
 
 
-        document
-        .getElementById("geminiScore")
-        .innerText =
-            data.geminiScore;
+    } catch (error) {
+
+        console.error(
+            "History error:",
+            error
+        );
 
 
-        /* -------------------------
-           WINNER
-        -------------------------- */
-
-        document
-        .getElementById("winnerText")
-        .innerText =
-            data.winner ||
-            "No winner";
-
-
-        /* -------------------------
-           REASON
-        -------------------------- */
-
-        document
-        .getElementById("reasonText")
-        .innerText =
-            data.reason ||
-            "No explanation available.";
-
-
-        /* -------------------------
-           SUCCESS
-        -------------------------- */
-
-        status.innerText =
-            "✅ Comparison completed successfully.";
-
+        list.innerHTML =
+            `
+            <div style="
+                padding:10px;
+                color:#888;
+                font-size:12px;
+            ">
+                History unavailable.
+            </div>
+            `;
     }
-
-
-    catch (error) {
-
-        console.error(error);
-
-        status.innerText =
-            "❌ Something went wrong. Please try again.";
-
-    }
-
-
-    /* -------------------------
-       ENABLE BUTTON
-    -------------------------- */
-
-    button.disabled = false;
-
-    button.innerText =
-        "Compare AI Responses";
-
 }
+
+
+/* ================= CLEAR HISTORY ================= */
+
+async function clearHistory() {
+
+    const confirmDelete =
+        confirm(
+            "Are you sure you want to clear all comparison history?"
+        );
+
+
+    if (!confirmDelete) {
+        return;
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/history/clear",
+                {
+                    method: "DELETE"
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (data.success) {
+
+            loadHistory();
+
+        } else {
+
+            alert(
+                "Unable to clear history."
+            );
+        }
+
+
+    } catch (error) {
+
+        alert(
+            "Connection error."
+        );
+    }
+}
+
+
+/* ================= SCROLL ================= */
+
+function scrollToBottom() {
+
+    const container =
+        document.getElementById(
+            "chatContainer"
+        );
+
+
+    setTimeout(
+        function() {
+
+            container.scrollTop =
+                container.scrollHeight;
+
+        },
+        50
+    );
+}
+
+
+/* ================= START ================= */
+
+loadHistory();
 
 </script>
 
