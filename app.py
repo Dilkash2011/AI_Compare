@@ -631,3 +631,195 @@ HUMAN_EVAL_PAGE = """
 <title>Human Evaluation</title>
 <style>
   body{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#f4f4f5}
+  .card{background:#fff;border-radius:10px;padding:12px;margin-bottom:16px}
+  pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;
+      background:#f9f9fa;padding:8px;border-radius:6px;max-height:260px;overflow:auto}
+  button{padding:10px 14px;margin:4px 4px 0 0;border:0;border-radius:8px;
+         background:#4f46e5;color:#fff;font-size:15px}
+  button.tie{background:#6b7280}
+  .done{opacity:.4}
+</style>
+</head>
+<body>
+<h3>Human Evaluation (blind): {{ rows|length }} left</h3>
+<p>Read both answers and pick the better one. Model names are hidden.</p>
+{% for r in rows %}
+  {% set swap = (r.id % 2 == 1) %}
+  <div class="card" id="c{{ r.id }}">
+    <b>Q{{ r.id }}: {{ r.question }}</b>
+    <p><b>Answer A</b></p>
+    <pre>{{ r.gemini_answer if swap else r.groq_answer }}</pre>
+    <p><b>Answer B</b></p>
+    <pre>{{ r.groq_answer if swap else r.gemini_answer }}</pre>
+    <button onclick="rate({{ r.id }}, '{{ 'Gemini' if swap else 'Groq' }}')">A is better</button>
+    <button onclick="rate({{ r.id }}, '{{ 'Groq' if swap else 'Gemini' }}')">B is better</button>
+    <button class="tie" onclick="rate({{ r.id }}, 'Tie')">Tie</button>
+  </div>
+{% endfor %}
+<script>
+async function rate(id, winner){
+  const res = await fetch('/rate', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id:id, winner:winner})});
+  if(res.ok){ document.getElementById('c'+id).classList.add('done'); }
+  else { alert('Could not save'); }
+}
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/human-eval", methods=["GET"])
+def human_eval():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT id, question, groq_answer, gemini_answer
+        FROM comparisons
+        WHERE valid = 1 AND human_winner IS NULL
+        ORDER BY id
+        LIMIT 50
+    """).fetchall()
+    conn.close()
+    return render_template_string(HUMAN_EVAL_PAGE, rows=rows)
+
+
+@app.route("/rate", methods=["POST"])
+def rate():
+    data = request.get_json() or {}
+    row_id = data.get("id")
+    winner = data.get("winner")
+
+    if winner not in ("Groq", "Gemini", "Tie") or not row_id:
+        return jsonify({"success": False, "error": "Invalid input"}), 400
+
+    conn = get_conn()
+    conn.execute("UPDATE comparisons SET human_winner = ? WHERE id = ?",
+                 (winner, row_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+
+# =========================
+# STATS + EXPORT (for the paper)
+# =========================
+
+@app.route("/stats", methods=["GET"])
+def stats():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM comparisons WHERE valid = 1").fetchall()
+    conn.close()
+
+    n = len(rows)
+    if n == 0:
+        return jsonify({"success": True, "valid_comparisons": 0})
+
+    def mean(values):
+        values = [v for v in values if v is not None]
+        return round(statistics.mean(values), 2) if values else None
+
+    def median(values):
+        values = [v for v in values if v is not None]
+        return round(statistics.median(values), 2) if values else None
+
+    wins = {"Groq": 0, "Gemini": 0, "Tie": 0}
+    for r in rows:
+        if r["winner"] in wins:
+            wins[r["winner"]] += 1
+
+    # Judge bias check: does each judge favour its own model?
+    # gap = (Groq answer quality - Gemini answer quality) as seen by that judge
+    gaps = {"groq": [], "gemini": []}
+    for r in rows:
+        try:
+            details = json.loads(r["judge_details"] or "{}")
+        except Exception:
+            continue
+        for judge_name in ("groq", "gemini"):
+            d = details.get(judge_name)
+            if d:
+                gaps[judge_name].append(
+                    quality_score(d["groq"]) - quality_score(d["gemini"]))
+
+    # Agreement with human raters
+    rated = [r for r in rows if r["human_winner"]]
+    agree = sum(1 for r in rated if r["human_winner"] == r["winner"])
+
+    human_wins = {"Groq": 0, "Gemini": 0, "Tie": 0}
+    for r in rated:
+        human_wins[r["human_winner"]] += 1
+
+    return jsonify({
+        "success": True,
+        "valid_comparisons": n,
+        "ai_judge_wins": wins,
+        "avg_quality": {
+            "groq": mean([r["groq_quality"] for r in rows]),
+            "gemini": mean([r["gemini_quality"] for r in rows]),
+        },
+        "avg_final_score": {
+            "groq": mean([r["groq_score"] for r in rows]),
+            "gemini": mean([r["gemini_score"] for r in rows]),
+        },
+        "response_time_sec": {
+            "groq_mean": mean([r["groq_speed"] for r in rows]),
+            "gemini_mean": mean([r["gemini_speed"] for r in rows]),
+            "groq_median": median([r["groq_speed"] for r in rows]),
+            "gemini_median": median([r["gemini_speed"] for r in rows]),
+        },
+        "judge_bias_check_mean_gap_groq_minus_gemini": {
+            "judged_by_groq": mean(gaps["groq"]),
+            "judged_by_gemini": mean(gaps["gemini"]),
+            "note": ("If the Groq judge gap is clearly higher than the "
+                     "Gemini judge gap, there is self-preference bias."),
+        },
+        "human_evaluation": {
+            "rated": len(rated),
+            "human_wins": human_wins,
+            "agreement_with_ai_judge_pct":
+                round(agree / len(rated) * 100, 1) if rated else None,
+        },
+        "settings": {
+            "groq_model": GROQ_MODEL,
+            "gemini_model": GEMINI_MODEL,
+            "speed_weight": SPEED_WEIGHT,
+            "tie_margin": TIE_MARGIN,
+            "temperature": ANSWER_TEMPERATURE,
+        },
+    })
+
+
+@app.route("/export.csv", methods=["GET"])
+def export_csv():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM comparisons ORDER BY id").fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    if rows:
+        writer = csv.writer(output)
+        writer.writerow(rows[0].keys())
+        for r in rows:
+            writer.writerow(list(r))
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=comparisons.csv"},
+    )
+
+
+# =========================
+# START
+# =========================
+
+if __name__ == "__main__":
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=os.environ.get("FLASK_DEBUG") == "1",
+    )
