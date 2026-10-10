@@ -1,39 +1,85 @@
 
-from flask import Flask, render_template, request, jsonify
+from flask import (
+    Flask, render_template, request, jsonify,
+    Response, render_template_string
+)
 from groq import Groq
 from google import genai
+from google.genai import types
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
 import os
-import time
-import sqlite3
+import io
+import csv
 import json
+import time
+import random
+import sqlite3
+import statistics
 
 load_dotenv()
 
 app = Flask(__name__)
 
 # =========================
-# API CLIENTS
+# CONFIGURATION
 # =========================
 
-groq_client = Groq(
-    api_key=os.environ.get("GROQ_API_KEY")
-)
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
-gemini_client = genai.Client(
-    api_key=os.environ.get("GEMINI_API_KEY")
+# Same settings for both answering models (fair comparison)
+SYSTEM_PROMPT = (
+    "You are a helpful AI assistant. "
+    "Give accurate, clear and relevant answers."
 )
+ANSWER_TEMPERATURE = 0.3
+
+# Scoring weights
+QUALITY_WEIGHTS = {"accuracy": 0.45, "relevance": 0.35, "clarity": 0.20}
+METRICS = list(QUALITY_WEIGHTS.keys())
+
+# Speed weight in the final score. 0.0 = speed is reported but not scored.
+SPEED_WEIGHT = float(os.environ.get("SPEED_WEIGHT", 0.0))
+
+# If final scores differ by less than this, result is a Tie.
+TIE_MARGIN = float(os.environ.get("TIE_MARGIN", 2.0))
+
+DB_PATH = os.environ.get("DB_PATH", "database.db")
+
+groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
 # =========================
 # DATABASE
 # =========================
 
-def init_db():
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
+# Columns added on top of the original schema (auto-migrated).
+EXTRA_COLUMNS = {
+    "groq_model": "TEXT",
+    "gemini_model": "TEXT",
+    "valid": "INTEGER DEFAULT 1",
+    "groq_quality": "REAL",
+    "gemini_quality": "REAL",
+    "groq_speed_score": "REAL",
+    "gemini_speed_score": "REAL",
+    "judge_details": "TEXT",
+    "human_winner": "TEXT",
+}
 
-    cursor.execute("""
+
+def get_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS comparisons (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             question TEXT NOT NULL,
@@ -55,197 +101,123 @@ def init_db():
         )
     """)
 
+    # Migrate old databases: add any missing columns
+    cur.execute("PRAGMA table_info(comparisons)")
+    existing = {row["name"] for row in cur.fetchall()}
+    for col, col_type in EXTRA_COLUMNS.items():
+        if col not in existing:
+            cur.execute(f"ALTER TABLE comparisons ADD COLUMN {col} {col_type}")
+
     conn.commit()
     conn.close()
 
 
-def save_comparison(
-    question,
-    groq_answer,
-    gemini_answer,
-    groq_speed,
-    gemini_speed,
-    groq_data,
-    gemini_data,
-    winner,
-    reason
-):
+def save_comparison(question, groq_answer, gemini_answer,
+                    groq_speed, gemini_speed, result, valid):
+    """Save one comparison. Returns the new row id (or None on error)."""
     try:
-        conn = sqlite3.connect("database.db")
-        cursor = conn.cursor()
+        g = result.get("groq", {})
+        m = result.get("gemini", {})
 
-        cursor.execute("""
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
             INSERT INTO comparisons (
-                question,
-                groq_answer,
-                gemini_answer,
-                groq_speed,
-                gemini_speed,
-                groq_accuracy,
-                groq_relevance,
-                groq_clarity,
-                groq_score,
-                gemini_accuracy,
-                gemini_relevance,
-                gemini_clarity,
-                gemini_score,
-                winner,
-                reason,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                question, groq_answer, gemini_answer,
+                groq_speed, gemini_speed,
+                groq_accuracy, groq_relevance, groq_clarity, groq_score,
+                gemini_accuracy, gemini_relevance, gemini_clarity, gemini_score,
+                winner, reason, created_at,
+                groq_model, gemini_model, valid,
+                groq_quality, gemini_quality,
+                groq_speed_score, gemini_speed_score,
+                judge_details
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
-            question,
-            groq_answer,
-            gemini_answer,
-            groq_speed,
-            gemini_speed,
-
-            groq_data.get("accuracy", 0),
-            groq_data.get("relevance", 0),
-            groq_data.get("clarity", 0),
-            groq_data.get("final_score", 0),
-
-            gemini_data.get("accuracy", 0),
-            gemini_data.get("relevance", 0),
-            gemini_data.get("clarity", 0),
-            gemini_data.get("final_score", 0),
-
-            winner,
-            reason,
-            time.strftime("%Y-%m-%d %H:%M:%S")
+            question, groq_answer, gemini_answer,
+            groq_speed, gemini_speed,
+            g.get("accuracy", 0), g.get("relevance", 0),
+            g.get("clarity", 0), g.get("final_score", 0),
+            m.get("accuracy", 0), m.get("relevance", 0),
+            m.get("clarity", 0), m.get("final_score", 0),
+            result.get("winner"), result.get("reason"),
+            time.strftime("%Y-%m-%d %H:%M:%S"),
+            GROQ_MODEL, GEMINI_MODEL, 1 if valid else 0,
+            g.get("quality", 0), m.get("quality", 0),
+            g.get("speed_score", 0), m.get("speed_score", 0),
+            json.dumps(result.get("judge_details", {}))
         ))
-
+        row_id = cur.lastrowid
         conn.commit()
         conn.close()
-
-        return True
+        return row_id
 
     except Exception as e:
         print("Database Save Error:", e)
-        return False
+        return None
+
+
+# Create tables at import time (needed for gunicorn on Render)
+init_db()
 
 
 # =========================
-# HOME PAGE
+# ANSWERING MODELS
 # =========================
 
-@app.route("/")
-def home():
-    return render_template("index.html")
-
-
-# =========================
-# GROQ API
-# =========================
-
-@app.route("/groq", methods=["POST"])
-def groq():
-
-    data = request.get_json() or {}
-
-    text = data.get("text", "").strip()
-
-    if not text:
-        return jsonify({
-            "success": False,
-            "answer": "Please enter a question.",
-            "speed": 0
-        }), 400
-
-    start_time = time.time()
-
+def call_groq(text):
+    start = time.perf_counter()
     try:
-
         response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-20b",
+            model=GROQ_MODEL,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful AI assistant. "
-                        "Give accurate, clear and relevant answers."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": text
-                }
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text},
             ],
-            temperature=0.3
+            temperature=ANSWER_TEMPERATURE,
         )
-
-        answer = response.choices[0].message.content
-
-        speed = round(time.time() - start_time, 2)
-
-        return jsonify({
+        speed = round(time.perf_counter() - start, 2)
+        return {
             "success": True,
-            "answer": answer,
-            "speed": speed
-        })
+            "answer": response.choices[0].message.content,
+            "speed": speed,
+        }, 200
 
     except Exception as e:
-
-        speed = round(time.time() - start_time, 2)
-
+        speed = round(time.perf_counter() - start, 2)
         print("Groq Error:", e)
-
-        return jsonify({
+        return {
             "success": False,
             "answer": "Groq API Error: " + str(e),
-            "speed": speed
-        }), 500
+            "speed": speed,
+        }, 500
 
 
-# =========================
-# GEMINI API
-# =========================
-
-@app.route("/gemini", methods=["POST"])
-def gemini():
-
-    data = request.get_json() or {}
-
-    text = data.get("text", "").strip()
-
-    if not text:
-        return jsonify({
-            "success": False,
-            "answer": "Please enter a question.",
-            "speed": 0
-        }), 400
-
-    start_time = time.time()
-
+def call_gemini(text):
+    start = time.perf_counter()
     try:
-
         response = gemini_client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=text
+            model=GEMINI_MODEL,
+            contents=text,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=ANSWER_TEMPERATURE,
+            ),
         )
-
-        answer = response.text
-
-        speed = round(time.time() - start_time, 2)
-
-        return jsonify({
+        speed = round(time.perf_counter() - start, 2)
+        return {
             "success": True,
-            "answer": answer,
-            "speed": speed
-        })
+            "answer": response.text,
+            "speed": speed,
+        }, 200
 
     except Exception as e:
-
-        speed = round(time.time() - start_time, 2)
-
+        speed = round(time.perf_counter() - start, 2)
         error_text = str(e)
-
         print("Gemini Error:", error_text)
 
         if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
-
-            return jsonify({
+            return {
                 "success": False,
                 "answer": (
                     "Gemini is temporarily unavailable because "
@@ -253,526 +225,417 @@ def gemini():
                 ),
                 "speed": speed,
                 "error_type": "quota",
-                "quota": True
-            }), 429
+                "quota": True,
+            }, 429
 
-        return jsonify({
+        return {
             "success": False,
             "answer": "Gemini API Error: " + error_text,
-            "speed": speed
-        }), 500
+            "speed": speed,
+        }, 500
+
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+@app.route("/groq", methods=["POST"])
+def groq_route():
+    data = request.get_json() or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"success": False,
+                        "answer": "Please enter a question.",
+                        "speed": 0}), 400
+    body, status = call_groq(text)
+    return jsonify(body), status
+
+
+@app.route("/gemini", methods=["POST"])
+def gemini_route():
+    data = request.get_json() or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"success": False,
+                        "answer": "Please enter a question.",
+                        "speed": 0}), 400
+    body, status = call_gemini(text)
+    return jsonify(body), status
 
 
 # =========================
-# AI JUDGE
+# JUDGING
 # =========================
 
-def ai_judge(
-    question,
-    groq_answer,
-    gemini_answer,
-    groq_speed=0,
-    gemini_speed=0
-):
+JUDGE_SYSTEM = (
+    "You are a strict, objective evaluator of AI answers. "
+    "Return only valid JSON."
+)
 
-    judge_prompt = f"""
-You are an expert AI response evaluator.
 
-Compare the two AI answers for the given question.
+def build_judge_prompt(question, answer_a, answer_b):
+    return f"""
+Evaluate two anonymous answers to the same question.
 
 QUESTION:
 {question}
 
-GROQ ANSWER:
-{groq_answer}
+ANSWER A:
+{answer_a}
 
-GEMINI ANSWER:
-{gemini_answer}
+ANSWER B:
+{answer_b}
 
-Evaluate both answers using:
+Score each answer from 0 to 100 on:
+- accuracy: factual correctness and absence of errors
+- relevance: how directly it answers what was asked
+- clarity: how clear, well organised and easy to understand it is
 
-Accuracy = 45%
-Relevance = 35%
-Clarity = 20%
+Rules:
+- Do NOT prefer an answer because it is longer or has more formatting.
+- Factual correctness matters most.
+- Use the full 0-100 range and different scores where the answers differ.
+- The reason must NOT guess which AI wrote which answer.
 
-Give each AI a score from 0 to 100.
-
-Also determine the winner.
-
-Return ONLY valid JSON in this exact format:
+Return ONLY this JSON and nothing else:
 
 {{
-    "groq_accuracy": 0,
-    "groq_relevance": 0,
-    "groq_clarity": 0,
-    "gemini_accuracy": 0,
-    "gemini_relevance": 0,
-    "gemini_clarity": 0,
-    "winner": "Groq",
-    "reason": "Short explanation"
+  "answer_a": {{"accuracy": 0, "relevance": 0, "clarity": 0}},
+  "answer_b": {{"accuracy": 0, "relevance": 0, "clarity": 0}},
+  "reason": "One or two sentences"
 }}
 """
 
-    try:
 
-        response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-20b",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an objective AI response evaluator. "
-                        "Return only valid JSON."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": judge_prompt
-                }
-            ],
-            temperature=0
-        )
+def extract_json(raw):
+    """Pull the first JSON object out of a model reply."""
+    raw = (raw or "").strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("No JSON object found in judge reply")
+    return json.loads(raw[start:end + 1])
 
-        result = response.choices[0].message.content.strip()
 
-        if result.startswith("```"):
-            result = result.replace("```json", "")
-            result = result.replace("```", "")
-            result = result.strip()
+def ask_groq_judge(prompt):
+    response = groq_client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[
+            {"role": "system", "content": JUDGE_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0,
+    )
+    return response.choices[0].message.content
 
-        scores = json.loads(result)
 
-        groq_accuracy = float(scores["groq_accuracy"])
-        groq_relevance = float(scores["groq_relevance"])
-        groq_clarity = float(scores["groq_clarity"])
+def ask_gemini_judge(prompt):
+    response = gemini_client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=JUDGE_SYSTEM,
+            temperature=0,
+            response_mime_type="application/json",
+        ),
+    )
+    return response.text
 
-        gemini_accuracy = float(scores["gemini_accuracy"])
-        gemini_relevance = float(scores["gemini_relevance"])
-        gemini_clarity = float(scores["gemini_clarity"])
 
-        # =========================
-        # QUALITY SCORE
-        # =========================
+def clamp(value):
+    return max(0.0, min(100.0, float(value)))
 
-        groq_quality = (
-            groq_accuracy * 0.45
-            + groq_relevance * 0.35
-            + groq_clarity * 0.20
-        )
 
-        gemini_quality = (
-            gemini_accuracy * 0.45
-            + gemini_relevance * 0.35
-            + gemini_clarity * 0.20
-        )
+def run_judge(judge_name, ask_fn, question, groq_answer, gemini_answer):
+    """
+    One judge evaluates both answers blind, in random order.
+    Returns a dict, or None if the judge failed.
+    """
+    swap = random.random() < 0.5  # True => Gemini shown as Answer A
 
-        # =========================
-        # SPEED SCORE
-        # =========================
+    if swap:
+        answer_a, answer_b = gemini_answer, groq_answer
+    else:
+        answer_a, answer_b = groq_answer, gemini_answer
 
-        if groq_speed > 0 and gemini_speed > 0:
+    prompt = build_judge_prompt(question, answer_a, answer_b)
 
-            fastest = min(groq_speed, gemini_speed)
+    last_error = None
+    for _ in range(2):  # one retry
+        try:
+            data = extract_json(ask_fn(prompt))
+            a = {k: clamp(data["answer_a"][k]) for k in METRICS}
+            b = {k: clamp(data["answer_b"][k]) for k in METRICS}
 
-            groq_speed_score = (
-                fastest / groq_speed
-            ) * 100
+            groq_scores, gemini_scores = (b, a) if swap else (a, b)
 
-            gemini_speed_score = (
-                fastest / gemini_speed
-            ) * 100
-
-        else:
-
-            groq_speed_score = 0
-            gemini_speed_score = 0
-
-        # =========================
-        # FINAL SCORE
-        # =========================
-
-        groq_final = (
-            groq_quality * 0.90
-            + groq_speed_score * 0.10
-        )
-
-        gemini_final = (
-            gemini_quality * 0.90
-            + gemini_speed_score * 0.10
-        )
-
-        if groq_final > gemini_final:
-            winner = "Groq"
-
-        elif gemini_final > groq_final:
-            winner = "Gemini"
-
-        else:
-            winner = "Tie"
-
-        return {
-            "success": True,
-            "winner": winner,
-            "reason": scores.get(
-                "reason",
-                "Comparison completed."
-            ),
-
-            "groq": {
-                "accuracy": groq_accuracy,
-                "relevance": groq_relevance,
-                "clarity": groq_clarity,
-                "quality": round(groq_quality, 2),
-                "speed_score": round(groq_speed_score, 2),
-                "final_score": round(groq_final, 2)
-            },
-
-            "gemini": {
-                "accuracy": gemini_accuracy,
-                "relevance": gemini_relevance,
-                "clarity": gemini_clarity,
-                "quality": round(gemini_quality, 2),
-                "speed_score": round(gemini_speed_score, 2),
-                "final_score": round(gemini_final, 2)
+            return {
+                "judge": judge_name,
+                "order": "Gemini first" if swap else "Groq first",
+                "groq": groq_scores,
+                "gemini": gemini_scores,
+                "reason": str(data.get("reason", "")).strip(),
             }
-        }
+        except Exception as e:
+            last_error = e
+            print(f"{judge_name} judge error:", e)
 
-    except Exception as e:
+    print(f"{judge_name} judge failed:", last_error)
+    return None
 
-        print("Judge Error:", e)
 
+def quality_score(scores):
+    return sum(scores[k] * QUALITY_WEIGHTS[k] for k in METRICS)
+
+
+def ai_judge(question, groq_answer, gemini_answer,
+             groq_speed=0, gemini_speed=0):
+
+    # Both models judge, in parallel
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(run_judge, "groq", ask_groq_judge,
+                        question, groq_answer, gemini_answer),
+            pool.submit(run_judge, "gemini", ask_gemini_judge,
+                        question, groq_answer, gemini_answer),
+        ]
+        judgements = [f.result() for f in futures]
+
+    judgements = [j for j in judgements if j]
+
+    if not judgements:
         return {
             "success": False,
             "winner": "Unable to determine",
             "reason": "AI comparison could not be completed.",
-            "error": str(e)
+            "error": "All judges failed",
         }
 
+    # Average each metric across the judges that worked
+    def avg(model, metric):
+        return sum(j[model][metric] for j in judgements) / len(judgements)
 
-# =========================
-# JUDGE ENDPOINT
-# =========================
+    groq_avg = {k: avg("groq", k) for k in METRICS}
+    gemini_avg = {k: avg("gemini", k) for k in METRICS}
 
-@app.route("/judge", methods=["POST"])
-def judge():
+    groq_quality = quality_score(groq_avg)
+    gemini_quality = quality_score(gemini_avg)
 
-    data = request.get_json() or {}
+    # Speed score: fastest = 100
+    if groq_speed > 0 and gemini_speed > 0:
+        fastest = min(groq_speed, gemini_speed)
+        groq_speed_score = fastest / groq_speed * 100
+        gemini_speed_score = fastest / gemini_speed * 100
+    else:
+        groq_speed_score = 0
+        gemini_speed_score = 0
 
+    groq_final = (groq_quality * (1 - SPEED_WEIGHT)
+                  + groq_speed_score * SPEED_WEIGHT)
+    gemini_final = (gemini_quality * (1 - SPEED_WEIGHT)
+                    + gemini_speed_score * SPEED_WEIGHT)
+
+    if abs(groq_final - gemini_final) < TIE_MARGIN:
+        winner = "Tie"
+    elif groq_final > gemini_final:
+        winner = "Groq"
+    else:
+        winner = "Gemini"
+
+    reason = " | ".join(
+        f"{j['judge'].title()} judge: {j['reason']}"
+        for j in judgements if j["reason"]
+    ) or "Comparison completed."
+
+    if len(judgements) == 1:
+        reason += " (Only one judge was available.)"
+
+    def pack(avg_scores, quality, speed_score, final):
+        return {
+            "accuracy": round(avg_scores["accuracy"], 2),
+            "relevance": round(avg_scores["relevance"], 2),
+            "clarity": round(avg_scores["clarity"], 2),
+            "quality": round(quality, 2),
+            "speed_score": round(speed_score, 2),
+            "final_score": round(final, 2),
+        }
+
+    return {
+        "success": True,
+        "valid": True,
+        "winner": winner,
+        "reason": reason,
+        "judges_used": [j["judge"] for j in judgements],
+        "groq": pack(groq_avg, groq_quality, groq_speed_score, groq_final),
+        "gemini": pack(gemini_avg, gemini_quality,
+                       gemini_speed_score, gemini_final),
+        "judge_details": {j["judge"]: j for j in judgements},
+    }
+
+
+def run_judge_request(data):
+    """Shared logic for /judge and /compare. Returns (result, status)."""
     question = data.get("question", "").strip()
-
     groq_answer = data.get("groq", "")
     gemini_answer = data.get("gemini", "")
-
     groq_speed = float(data.get("groqSpeed", 0) or 0)
     gemini_speed = float(data.get("geminiSpeed", 0) or 0)
+    groq_ok = bool(data.get("groqSuccess", False))
+    gemini_ok = bool(data.get("geminiSuccess", False))
 
-    groq_success = data.get("groqSuccess", False)
-    gemini_success = data.get("geminiSuccess", False)
+    zero = {"accuracy": 0, "relevance": 0, "clarity": 0,
+            "quality": 0, "speed_score": 0, "final_score": 0}
 
-    # =========================
-    # ONLY GROQ AVAILABLE
-    # =========================
-
-    if groq_success and not gemini_success:
-
+    # Only one model answered: no real comparison -> saved as invalid
+    if groq_ok != gemini_ok:
+        winner = "Groq" if groq_ok else "Gemini"
+        other = "Gemini" if groq_ok else "Groq"
         result = {
             "success": True,
-            "winner": "Groq",
-            "reason": (
-                "Gemini was unavailable, so a complete "
-                "two-model comparison could not be performed."
-            ),
-
-            "groq": {
-                "accuracy": 0,
-                "relevance": 0,
-                "clarity": 0,
-                "quality": 0,
-                "speed_score": 100,
-                "final_score": 0
-            },
-
-            "gemini": {
-                "accuracy": 0,
-                "relevance": 0,
-                "clarity": 0,
-                "quality": 0,
-                "speed_score": 0,
-                "final_score": 0
-            }
+            "valid": False,
+            "winner": winner,
+            "reason": (f"{other} was unavailable, so a complete "
+                       "two-model comparison could not be performed."),
+            "groq": dict(zero),
+            "gemini": dict(zero),
         }
+        row_id = save_comparison(question, groq_answer, gemini_answer,
+                                 groq_speed, gemini_speed, result, False)
+        result["id"] = row_id
+        return result, 200
 
-        save_comparison(
-            question,
-            groq_answer,
-            gemini_answer,
-            groq_speed,
-            gemini_speed,
-            result["groq"],
-            result["gemini"],
-            result["winner"],
-            result["reason"]
-        )
-
-        return jsonify(result)
-
-    # =========================
-    # ONLY GEMINI AVAILABLE
-    # =========================
-
-    if gemini_success and not groq_success:
-
-        result = {
-            "success": True,
-            "winner": "Gemini",
-            "reason": (
-                "Groq was unavailable, so a complete "
-                "two-model comparison could not be performed."
-            ),
-
-            "groq": {
-                "accuracy": 0,
-                "relevance": 0,
-                "clarity": 0,
-                "quality": 0,
-                "speed_score": 0,
-                "final_score": 0
-            },
-
-            "gemini": {
-                "accuracy": 0,
-                "relevance": 0,
-                "clarity": 0,
-                "quality": 0,
-                "speed_score": 100,
-                "final_score": 0
-            }
-        }
-
-        save_comparison(
-            question,
-            groq_answer,
-            gemini_answer,
-            groq_speed,
-            gemini_speed,
-            result["groq"],
-            result["gemini"],
-            result["winner"],
-            result["reason"]
-        )
-
-        return jsonify(result)
-
-    # =========================
-    # BOTH AVAILABLE
-    # =========================
-
-    if groq_success and gemini_success:
-
-        result = ai_judge(
-            question,
-            groq_answer,
-            gemini_answer,
-            groq_speed,
-            gemini_speed
-        )
-
+    if groq_ok and gemini_ok:
+        result = ai_judge(question, groq_answer, gemini_answer,
+                          groq_speed, gemini_speed)
         if result.get("success"):
+            row_id = save_comparison(question, groq_answer, gemini_answer,
+                                     groq_speed, gemini_speed, result, True)
+            result["id"] = row_id
+            result.pop("judge_details", None)  # keep response small
+            return result, 200
+        return result, 200
 
-            save_comparison(
-                question,
-                groq_answer,
-                gemini_answer,
-                groq_speed,
-                gemini_speed,
-                result["groq"],
-                result["gemini"],
-                result["winner"],
-                result["reason"]
-            )
-
-        return jsonify(result)
-
-    # =========================
-    # BOTH FAILED
-    # =========================
-
-    return jsonify({
+    return {
         "success": False,
         "winner": "None",
-        "reason": "Both AI services are currently unavailable."
-    }), 503
+        "reason": "Both AI services are currently unavailable.",
+    }, 503
 
 
-# =========================
-# HISTORY API
-# =========================
+@app.route("/judge", methods=["POST"])
+def judge_route():
+    result, status = run_judge_request(request.get_json() or {})
+    return jsonify(result), status
 
-@app.route("/history", methods=["GET"])
-def history():
-
-    try:
-
-        conn = sqlite3.connect("database.db")
-        conn.row_factory = sqlite3.Row
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT *
-            FROM comparisons
-            ORDER BY id DESC
-        """)
-
-        rows = cursor.fetchall()
-
-        conn.close()
-
-        history_data = []
-
-        for row in rows:
-            history_data.append(dict(row))
-
-        return jsonify({
-            "success": True,
-            "history": history_data
-        })
-
-    except Exception as e:
-
-        print("History Error:", e)
-
-        return jsonify({
-            "success": False,
-            "history": [],
-            "error": str(e)
-        }), 500
-
-
-# =========================
-# DELETE HISTORY
-# =========================
-
-@app.route("/history/clear", methods=["DELETE"])
-def clear_history():
-
-    try:
-
-        conn = sqlite3.connect("database.db")
-        cursor = conn.cursor()
-
-        cursor.execute("DELETE FROM comparisons")
-
-        conn.commit()
-        conn.close()
-
-        return jsonify({
-            "success": True,
-            "message": "Comparison history cleared successfully."
-        })
-
-    except Exception as e:
-
-        print("Clear History Error:", e)
-
-        return jsonify({
-            "success": False,
-            "message": "Could not clear history.",
-            "error": str(e)
-        }), 500
-
-
-# =========================
-# OLD COMPATIBILITY ROUTE
-# =========================
 
 @app.route("/compare", methods=["POST"])
 def compare():
-
+    """Old compatibility route: answers + judging in one call."""
     data = request.get_json() or {}
-
     text = data.get("text", "").strip()
 
     if not text:
-        return jsonify({
-            "success": False,
-            "error": "Please enter a question."
-        }), 400
+        return jsonify({"success": False,
+                        "error": "Please enter a question."}), 400
 
-    # Call Groq
-    groq_response = groq()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_groq = pool.submit(call_groq, text)
+        f_gemini = pool.submit(call_gemini, text)
+        groq_json, _ = f_groq.result()
+        gemini_json, _ = f_gemini.result()
 
-    if isinstance(groq_response, tuple):
-        groq_json = groq_response[0].get_json()
-    else:
-        groq_json = groq_response.get_json()
-
-    # Call Gemini
-    gemini_response = gemini()
-
-    if isinstance(gemini_response, tuple):
-        gemini_json = gemini_response[0].get_json()
-    else:
-        gemini_json = gemini_response.get_json()
-
-    groq_success = groq_json.get(
-        "success",
-        False
-    )
-
-    gemini_success = gemini_json.get(
-        "success",
-        False
-    )
-
-    judge_json = {
-        "success": False,
-        "winner": "None",
-        "reason": "Both AI services are unavailable."
-    }
-
-    if groq_success or gemini_success:
-
-        judge_data = {
-            "question": text,
-            "groq": groq_json.get("answer", ""),
-            "gemini": gemini_json.get("answer", ""),
-            "groqSpeed": groq_json.get("speed", 0),
-            "geminiSpeed": gemini_json.get("speed", 0),
-            "groqSuccess": groq_success,
-            "geminiSuccess": gemini_success
-        }
-
-        with app.test_request_context(
-            "/judge",
-            method="POST",
-            json=judge_data
-        ):
-            judge_response = judge()
-
-        if isinstance(judge_response, tuple):
-            judge_json = judge_response[0].get_json()
-        else:
-            judge_json = judge_response.get_json()
+    judge_json, _ = run_judge_request({
+        "question": text,
+        "groq": groq_json.get("answer", ""),
+        "gemini": gemini_json.get("answer", ""),
+        "groqSpeed": groq_json.get("speed", 0),
+        "geminiSpeed": gemini_json.get("speed", 0),
+        "groqSuccess": groq_json.get("success", False),
+        "geminiSuccess": gemini_json.get("success", False),
+    })
 
     return jsonify({
         "success": True,
         "groq": groq_json,
         "gemini": gemini_json,
-        "judge": judge_json
+        "judge": judge_json,
     })
 
 
 # =========================
-# START APPLICATION
+# HISTORY
 # =========================
 
-if __name__ == "__main__":
+@app.route("/history", methods=["GET"])
+def history():
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT * FROM comparisons ORDER BY id DESC").fetchall()
+        conn.close()
+        return jsonify({"success": True,
+                        "history": [dict(r) for r in rows]})
+    except Exception as e:
+        print("History Error:", e)
+        return jsonify({"success": False, "history": [],
+                        "error": str(e)}), 500
 
-    init_db()
 
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=True
-    )
+@app.route("/history/clear", methods=["DELETE"])
+def clear_history():
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM comparisons")
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True,
+                        "message": "Comparison history cleared successfully."})
+    except Exception as e:
+        print("Clear History Error:", e)
+        return jsonify({"success": False,
+                        "message": "Could not clear history.",
+                        "error": str(e)}), 500
+
+
+# =========================
+# HUMAN EVALUATION (ground truth)
+# =========================
+
+HUMAN_EVAL_PAGE = """
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human Evaluation</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#f4f4f5}
+  .card{background:#fff;border-radius:10px;padding:12px;margin-bottom:16px}
+  pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;
+      background:#f9f9fa;padding:8px;border-radius:6px;max-height:260px;overflow:auto}
+  button{padding:10px 14px;margin:4px 4px 0 0;border:0;border-radius:8px;
+         background:#4f46e5;color:#fff;font-size:15px}
+  button.tie{background:#6b7280}
+  .done{opacity:.4}
+</style>
+</head>
+<body>
+<h3>Human Evaluation (blind): {{ rows|length }} left</h3>
+<p>Read both answers and pick the better one. Model names are hidden.</p>
+{% for r in rows %}
+  {% set swap = (r.id % 2 == 1) %}
+  <div class="card" id="c{{ r.id }}">
+    <b>Q{{ r.id }}: {{ r.question }}</b>
+    <p><b>Answer A</b></p>
+    <pre>{{ r.gemini_answer if swap else r.groq_answer }}</pre>
+    <p><b>Answer B</b></p>
+    <pre>{{ r.groq_answer if swap else r.gemini_answer }}</pre>
+    <button onclick="rate({{ r.id }}, '{{ 'Gemini' if swap else 'Groq' }}')">A is better</button>
+    <button onclick="rate({{ r.id }}, '{{ 'Groq' if swap else 'Gemini' }}')">B is better</button>
+    <button class="tie" onclick="rate({{ r.id }}, 'Tie')">Tie</button>
+  </div>
+{% endfor %}
+<script>
+async function rate(id, winner){
+  const res = await fetch('/rate', {method:'POST',
+    headers:{'Content-Type':'
