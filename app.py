@@ -1,3 +1,17 @@
+"""
+AI Compare - Groq vs Gemini  (MCA Dissertation Project)
+
+Improvements over the first version:
+  1. Dual cross-judging: BOTH Groq and Gemini judge, scores are averaged,
+     so self-preference bias of a single judge cancels out.
+  2. Blind + randomized order: judges see "Answer A / Answer B" in random order.
+  3. Fair setup: same system prompt and same temperature for both models.
+  4. Speed is reported separately (default weight 0 in final score).
+  5. Failed / one-sided comparisons are flagged valid=0 and excluded from stats.
+  6. Human evaluation page (/human-eval) + /stats + /export.csv for analysis.
+  7. Model names and all judge scores stored in DB for reproducibility.
+  8. init_db runs on import, so it works with gunicorn on Render.
+"""
 
 from flask import (
     Flask, render_template, request, jsonify,
@@ -194,45 +208,52 @@ def call_groq(text):
 
 
 def call_gemini(text):
-    start = time.perf_counter()
-    try:
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=text,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=ANSWER_TEMPERATURE,
-            ),
-        )
-        speed = round(time.perf_counter() - start, 2)
-        return {
-            "success": True,
-            "answer": response.text,
-            "speed": speed,
-        }, 200
-
-    except Exception as e:
-        speed = round(time.perf_counter() - start, 2)
-        error_text = str(e)
-        print("Gemini Error:", error_text)
-
-        if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
-            return {
-                "success": False,
-                "answer": (
-                    "Gemini is temporarily unavailable because "
-                    "its API quota has been reached. Please try again later."
+    """Call Gemini. Retries up to 2 times on temporary (503) errors.
+    Only the time of the successful attempt is counted as speed."""
+    error_text = ""
+    speed = 0
+    for attempt in range(3):
+        start = time.perf_counter()
+        try:
+            response = gemini_client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=text,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=ANSWER_TEMPERATURE,
                 ),
-                "speed": speed,
-                "error_type": "quota",
-                "quota": True,
-            }, 429
+            )
+            speed = round(time.perf_counter() - start, 2)
+            return {"success": True,
+                    "answer": response.text,
+                    "speed": speed}, 200
 
-        return {
-            "success": False,
+        except Exception as e:
+            speed = round(time.perf_counter() - start, 2)
+            error_text = str(e)
+            print("Gemini Error:", error_text)
+
+            if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+                return {
+                    "success": False,
+                    "answer": ("Gemini is temporarily unavailable because "
+                               "its API quota has been reached. "
+                               "Please try again later."),
+                    "speed": speed,
+                    "error_type": "quota",
+                    "quota": True,
+                }, 429
+
+            temporary = ("503" in error_text or "UNAVAILABLE" in error_text
+                         or "overloaded" in error_text.lower())
+            if temporary and attempt < 2:
+                time.sleep(2 * (attempt + 1))
+                continue
+            break
+
+    return {"success": False,
             "answer": "Gemini API Error: " + error_text,
-            "speed": speed,
-        }, 500
+            "speed": speed}, 500
 
 
 @app.route("/")
@@ -610,32 +631,3 @@ HUMAN_EVAL_PAGE = """
 <title>Human Evaluation</title>
 <style>
   body{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#f4f4f5}
-  .card{background:#fff;border-radius:10px;padding:12px;margin-bottom:16px}
-  pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;
-      background:#f9f9fa;padding:8px;border-radius:6px;max-height:260px;overflow:auto}
-  button{padding:10px 14px;margin:4px 4px 0 0;border:0;border-radius:8px;
-         background:#4f46e5;color:#fff;font-size:15px}
-  button.tie{background:#6b7280}
-  .done{opacity:.4}
-</style>
-</head>
-<body>
-<h3>Human Evaluation (blind): {{ rows|length }} left</h3>
-<p>Read both answers and pick the better one. Model names are hidden.</p>
-{% for r in rows %}
-  {% set swap = (r.id % 2 == 1) %}
-  <div class="card" id="c{{ r.id }}">
-    <b>Q{{ r.id }}: {{ r.question }}</b>
-    <p><b>Answer A</b></p>
-    <pre>{{ r.gemini_answer if swap else r.groq_answer }}</pre>
-    <p><b>Answer B</b></p>
-    <pre>{{ r.groq_answer if swap else r.gemini_answer }}</pre>
-    <button onclick="rate({{ r.id }}, '{{ 'Gemini' if swap else 'Groq' }}')">A is better</button>
-    <button onclick="rate({{ r.id }}, '{{ 'Groq' if swap else 'Gemini' }}')">B is better</button>
-    <button class="tie" onclick="rate({{ r.id }}, 'Tie')">Tie</button>
-  </div>
-{% endfor %}
-<script>
-async function rate(id, winner){
-  const res = await fetch('/rate', {method:'POST',
-    headers:{'Content-Type':'
