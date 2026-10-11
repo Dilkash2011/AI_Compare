@@ -3,3 +3,4 @@ groq
 google-genai
 python-dotenv
 gunicorn
+psycopg[binary]
