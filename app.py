@@ -1,5 +1,4 @@
 """
-
 AI Compare - Groq vs Gemini  (MCA Dissertation Project)
 
 Improvements over the first version:
