@@ -381,7 +381,7 @@ def call_gemini(text):
     error_text = ""
     overall_start = time.perf_counter()
 
-    for attempt in range(3):
+    for attempt in range(2):  # one retry for temporary server errors
         try:
             response = gemini_client.models.generate_content(
                 model=GEMINI_MODEL,
@@ -420,8 +420,9 @@ def call_gemini(text):
                 or "UNAVAILABLE" in error_text
                 or "overloaded" in error_text.lower()
             )
-            if temporary and attempt < 2:
-                time.sleep(2 * (attempt + 1))
+            if temporary and attempt < 1:
+                # Short backoff avoids adding several seconds to transient failures.
+                time.sleep(1)
                 continue
             break
 
