@@ -142,7 +142,8 @@ METRICS = list(QUALITY_WEIGHTS.keys())
 
 # Speed weight in the final score. 0.0 = speed is reported but not scored.
 
-SPEED_WEIGHT = float(os.environ.get("SPEED_WEIGHT", 0.0))
+# Fixed scoring policy for reproducible research: quality 85%, response speed 15%.
+SPEED_WEIGHT = 0.15
 
 # If final scores differ by less than this, result is a Tie.
 
@@ -376,90 +377,61 @@ def call_groq(text):
         }, 500
 
 def call_gemini(text):
-
-    """Call Gemini. Retries up to 2 times on temporary (503) errors.
-
-    Only the time of the successful attempt is counted as speed."""
-
+    """Call Gemini with retries; report total user-perceived elapsed time."""
     error_text = ""
-
-    speed = 0
+    overall_start = time.perf_counter()
 
     for attempt in range(3):
-
-        start = time.perf_counter()
-
         try:
-
             response = gemini_client.models.generate_content(
-
                 model=GEMINI_MODEL,
-
                 contents=text,
-
                 config=types.GenerateContentConfig(
-
                     system_instruction=SYSTEM_PROMPT,
-
                     temperature=ANSWER_TEMPERATURE,
-
                 ),
-
             )
-
-            speed = round(time.perf_counter() - start, 2)
-
-            return {"success": True,
-
-                    "answer": response.text,
-
-                    "speed": speed}, 200
+            speed = round(time.perf_counter() - overall_start, 2)
+            return {
+                "success": True,
+                "answer": response.text,
+                "speed": speed,
+            }, 200
 
         except Exception as e:
-
-            speed = round(time.perf_counter() - start, 2)
-
             error_text = str(e)
-
             print("Gemini Error:", error_text)
+            speed = round(time.perf_counter() - overall_start, 2)
 
             if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
-
                 return {
-
                     "success": False,
-
-                    "answer": ("Gemini is temporarily unavailable because "
-
-                               "its API quota has been reached. "
-
-                               "Please try again later."),
-
+                    "answer": (
+                        "Gemini is temporarily unavailable because "
+                        "its API quota has been reached. Please try again later."
+                    ),
                     "speed": speed,
-
                     "error_type": "quota",
-
                     "quota": True,
-
                 }, 429
 
-            temporary = ("503" in error_text or "UNAVAILABLE" in error_text
-
-                         or "overloaded" in error_text.lower())
-
+            temporary = (
+                "503" in error_text
+                or "UNAVAILABLE" in error_text
+                or "overloaded" in error_text.lower()
+            )
             if temporary and attempt < 2:
-
                 time.sleep(2 * (attempt + 1))
-
                 continue
-
             break
 
-    return {"success": False,
+    speed = round(time.perf_counter() - overall_start, 2)
+    return {
+        "success": False,
+        "answer": "Gemini API Error: " + error_text,
+        "speed": speed,
+    }, 500
 
-            "answer": "Gemini API Error: " + error_text,
-
-            "speed": speed}, 500
 
 @app.route("/")
 
@@ -541,20 +513,25 @@ ANSWER B:
 
 Score each answer from 0 to 100 on:
 
-- accuracy: factual correctness and absence of errors
+- accuracy: factual correctness; penalize unsupported or false claims
 
-- relevance: how directly it answers what was asked
+- relevance: how directly and completely it addresses the exact question
 
-- clarity: how clear, well organised and easy to understand it is
+- clarity: how understandable, organized, and unambiguous it is
+
+Use these anchors consistently:
+- 90-100: excellent; no meaningful weaknesses for this criterion
+- 75-89: good; only minor weaknesses
+- 50-74: mixed; noticeable weaknesses or omissions
+- 25-49: poor; major weaknesses
+- 0-24: very poor, mostly incorrect, irrelevant, or unclear
 
 Rules:
-
-- Do NOT prefer an answer because it is longer or has more formatting.
-
-- Factual correctness matters most.
-
-- Use the full 0-100 range and different scores where the answers differ.
-
+- Judge answer content against the question; do not reward a model name.
+- Do NOT prefer an answer merely because it is longer or has more formatting.
+- Do not treat confident wording as proof of factual accuracy.
+- Factual correctness matters most; do not invent facts to justify a score.
+- Use the same standards for both answers and allow equal scores when warranted.
 - The reason must NOT guess which AI wrote which answer.
 
 Return ONLY this JSON and nothing else:
@@ -826,6 +803,17 @@ def ai_judge(question, groq_answer, gemini_answer,
         "reason": reason,
 
         "judges_used": [j["judge"] for j in judgements],
+        "scoring": {
+            "quality_weights": QUALITY_WEIGHTS,
+            "speed_weight": SPEED_WEIGHT,
+            "quality_weight": round(1.0 - SPEED_WEIGHT, 4),
+            "overall_metric_weights_pct": {
+                "accuracy": round((1.0 - SPEED_WEIGHT) * QUALITY_WEIGHTS["accuracy"] * 100, 2),
+                "relevance": round((1.0 - SPEED_WEIGHT) * QUALITY_WEIGHTS["relevance"] * 100, 2),
+                "clarity": round((1.0 - SPEED_WEIGHT) * QUALITY_WEIGHTS["clarity"] * 100, 2),
+                "speed": round(SPEED_WEIGHT * 100, 2),
+            },
+        },
 
         "groq": pack(groq_avg, groq_quality, groq_speed_score, groq_final),
 
