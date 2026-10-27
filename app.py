@@ -1369,7 +1369,7 @@ def export_csv():
 
         for r in rows:
 
-            writer.writerow(list(r))
+            writer.writerow(list(r.values()))
 
     return Response(
 
